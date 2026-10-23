@@ -7,7 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 Future<void> main() async {
- WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized();
 
   // init timezone
   tz.initializeTimeZones();

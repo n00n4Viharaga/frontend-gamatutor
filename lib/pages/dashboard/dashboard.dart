@@ -8,6 +8,7 @@ import 'package:gamatutor_kanban/service/SecureTokenStorage.dart';
 import 'package:gamatutor_kanban/service/cardService.dart';
 import 'package:gamatutor_kanban/model/card.dart';
 import 'package:gamatutor_kanban/service/loginService.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 class Dashboard extends StatefulWidget {
   final User? user;
@@ -15,6 +16,26 @@ class Dashboard extends StatefulWidget {
 
   @override
   State<Dashboard> createState() => _DashboardState();
+}
+
+class _Quest {
+  final String title;
+  final int done;
+  final int target;
+  final int xpReward;
+
+  const _Quest(this.title, this.done, this.target, {this.xpReward = 15});
+
+  // ─── Getter kenyamanan ───
+  bool get isCompleted => done >= target;
+  double get progress => target == 0 ? 0.0 : (done / target).clamp(0.0, 1.0);
+}
+
+class _Achievement {
+  final String emoji;
+  final String title;
+  final bool unlocked;
+  _Achievement(this.emoji, this.title, this.unlocked);
 }
 
 class _DashboardState extends State<Dashboard> {
@@ -39,6 +60,56 @@ class _DashboardState extends State<Dashboard> {
       return 'Selamat Malam,';
     }
   }
+
+  // ─── Level & XP derived dari completed cards ───
+  int get _xp => _completedTaskCount * 50; // 50 XP per card done
+  int get _xpTarget => (_xp ~/ 500 + 1) * 500; // target next level
+  int get _level => (_xp ~/ 500) + 1;
+
+  // ─── Streak derived (sementara) ───
+  // Idealnya dari card_column_movements per hari, tapi jika belum ada,
+  // minimal tampilkan "hari ini sudah aktif"
+  int get _streakDays {
+    if (_cardsList.isEmpty) return 0;
+    // Logic: jika ada card yang dibuat/modified hari ini
+    final today = DateTime.now();
+    final hasTodayActivity = _cardsList.any((c) {
+      final d = c.createdAt ?? c.startTime;
+      if (d == null) return false;
+      return d.year == today.year &&
+          d.month == today.month &&
+          d.day == today.day;
+    });
+    return hasTodayActivity ? 1 : 0;
+  }
+
+  // ─── Achievement milestones derived ───
+  List<_Achievement> get _achievements {
+    final total = _cardsList.length;
+    final done = _completedTaskCount;
+    final focus = _formattedFocusDuration;
+
+    return [
+      _Achievement('🎴', 'First Card', total >= 1),
+      _Achievement('✅', 'First Done', done >= 1),
+      _Achievement('🔥', '5 Done', done >= 5),
+      _Achievement('📚', '10 Cards', total >= 10),
+      _Achievement('🏆', 'First Hour', focus != '0j'),
+    ];
+  }
+
+  // ─── Profil fallback dari greeting ───
+  String get _profileLabel {
+    // Idealnya dari quizResult.userProfile
+    // Fallback: "Learner" atau username
+    return 'Learner';
+  }
+
+  final _dailyQuests = [
+    _Quest('Buat 1 card baru hari ini', 0, 1),
+    _Quest('Tandai 1 card selesai', 0, 1),
+    _Quest('Belajar minimal 15 menit', 0, 1),
+  ];
 
   @override
   void initState() {
@@ -188,24 +259,600 @@ class _DashboardState extends State<Dashboard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
-          const SizedBox(height: 16),
-          _buildQuoteCard(),
-          const SizedBox(height: 16),
-          _buildQuestBanner(),
-          const SizedBox(height: 16),
-          _buildCharacterAndStatsCard(),
-          const SizedBox(height: 16),
-          _buildAchievementCard(),
-          const SizedBox(height: 16),
-          _buildLearningPatternCard(),
-          const SizedBox(height: 16),
-          _buildPersonalBestCard(),
           const SizedBox(height: 20),
-          _buildTaskHeader(),
-          const SizedBox(height: 12),
-          _buildTodaysTaskList(),
+          _buildHeroCard(), // ★ BARU: avatar + level + XP
+          const SizedBox(height: 16),
+          _buildProfileRadarCard(), // ★ BARU: radar chart MSLQ
+          const SizedBox(height: 16),
+          _buildDailyQuestCard(), // ★ BARU: daily quest
+          const SizedBox(height: 16),
+          _buildQuickActions(), // ★ BARU: quick actions
+          const SizedBox(height: 16),
+          _buildTodaysTaskList(), // ♻️ Refactor dari _buildTodaysTaskList
+          const SizedBox(height: 16),
+          _buildAchievementsScroll(), // ★ BARU: horizontal badges
           const SizedBox(height: 20),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAchievementsScroll() {
+    final achievements = _achievements;
+    final unlockedCount = achievements.where((a) => a.unlocked).length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text('🏆', style: TextStyle(fontSize: 16)),
+            const SizedBox(width: 8),
+            const Text(
+              'Pencapaian',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$unlockedCount/${achievements.length}',
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFD97706),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 92,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: achievements.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
+              final a = achievements[index];
+              return Container(
+                width: 84,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: a.unlocked
+                      ? const Color(0xFFFFFBEB)
+                      : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: a.unlocked
+                        ? const Color(0xFFFDE68A)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Opacity(
+                      opacity: a.unlocked ? 1.0 : 0.3,
+                      child: Text(
+                        a.emoji,
+                        style: const TextStyle(fontSize: 26),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      a.title,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: a.unlocked
+                            ? const Color(0xFF92400E)
+                            : const Color(0xFF94A3B8),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeroCard() {
+    final firstName = _currentUser?.firstName ?? 'Kamu';
+    final initial = firstName.isNotEmpty ? firstName[0].toUpperCase() : '?';
+    final progress = _xpTarget > 0 ? _xp / _xpTarget : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFEC4899)],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              // Avatar dari inisial nama (tidak butuh backend)
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.25),
+                  border: Border.all(color: Colors.white, width: 3),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'LEVEL $_level',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Halo, $firstName!',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        height: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Streak pill (derived)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('🔥', style: TextStyle(fontSize: 14)),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$_streakDays',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          // XP bar
+          Row(
+            children: [
+              const Icon(Icons.bolt_rounded, color: Colors.white, size: 16),
+              const SizedBox(width: 4),
+              Text(
+                '$_xp / $_xpTarget XP',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${(progress * 100).toInt()}%',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: progress.clamp(0.0, 1.0),
+              minHeight: 10,
+              backgroundColor: Colors.white.withValues(alpha: 0.25),
+              valueColor: const AlwaysStoppedAnimation(Colors.white),
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Stats (semua dari data existing)
+          Row(
+            children: [
+              _heroMiniStat('📚', '${_cardsList.length}', 'Cards'),
+              _heroMiniStat('✅', '$_completedTaskCount', 'Selesai'),
+              _heroMiniStat('⏱️', _formattedFocusDuration, 'Fokus'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _heroMiniStat(String emoji, String value, String label) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 14)),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.75),
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileRadarCard() {
+    // Data dummy — nanti dari backend (normalized_scores)
+    final scores = {
+      'organization': 50.0,
+      'time_management': 25.0,
+      'metacognitive': 38.0,
+      'help_seeking': 63.0,
+      'elaboration': 88.0,
+      'rehearsal': 13.0,
+    };
+    final labels = [
+      'Organisasi',
+      'Waktu',
+      'Metakognitif',
+      'Bantuan',
+      'Elaborasi',
+      'Latihan',
+    ];
+    final values = scores.values.toList();
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEF2FF),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.radar_rounded,
+                  color: Color(0xFF6366F1),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Profil Kemampuanmu',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    Text(
+                      'Berdasarkan hasil kuis onboarding',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  // TODO: navigasi ke recommendation screen
+                },
+                child: const Text(
+                  'Detail',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF6366F1),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 220,
+            child: RadarChart(
+              RadarChartData(
+                dataSets: [
+                  RadarDataSet(
+                    fillColor: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                    borderColor: const Color(0xFF6366F1),
+                    borderWidth: 2,
+                    entryRadius: 3,
+                    dataEntries: values
+                        .map((v) => RadarEntry(value: v))
+                        .toList(),
+                  ),
+                ],
+                radarShape: RadarShape.polygon,
+                radarBackgroundColor: Colors.transparent,
+                borderData: FlBorderData(show: false),
+                radarBorderData: BorderSide(
+                  color: Colors.grey.withValues(alpha: 0.3),
+                ),
+                titlePositionPercentageOffset: 0.18,
+                titleTextStyle: const TextStyle(
+                  color: Color(0xFF475569),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+                getTitle: (index, angle) =>
+                    RadarChartTitle(text: labels[index]),
+                tickCount: 4,
+                ticksTextStyle: const TextStyle(color: Colors.transparent),
+                tickBorderData: BorderSide(
+                  color: Colors.grey.withValues(alpha: 0.15),
+                ),
+                gridBorderData: BorderSide(
+                  color: Colors.grey.withValues(alpha: 0.15),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDailyQuestCard() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFFF7ED), Color(0xFFFEF3C7)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFFED7AA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('🎯', style: TextStyle(fontSize: 20)),
+              const SizedBox(width: 8),
+              const Text(
+                'Misi Hari Ini',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF92400E),
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Text(
+                  '+50 XP',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _questItem('Selesaikan 2 sesi Pomodoro', 0, 2),
+          const SizedBox(height: 10),
+          _questItem('Review 5 flashcard', 0, 5),
+          const SizedBox(height: 10),
+          _questItem('Buat 1 card baru', 0, 1),
+        ],
+      ),
+    );
+  }
+
+  Widget _questItem(String title, int done, int target) {
+    final progress = done / target;
+    final isDone = done >= target;
+    return Row(
+      children: [
+        Icon(
+          isDone ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
+          size: 18,
+          color: isDone ? const Color(0xFF16A34A) : const Color(0xFF92400E),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isDone
+                      ? const Color(0xFF16A34A)
+                      : const Color(0xFF78350F),
+                  decoration: isDone ? TextDecoration.lineThrough : null,
+                ),
+              ),
+              const SizedBox(height: 4),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 5,
+                  backgroundColor: Colors.white.withValues(alpha: 0.6),
+                  valueColor: AlwaysStoppedAnimation(
+                    isDone ? const Color(0xFF16A34A) : const Color(0xFFF59E0B),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$done/$target',
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF78350F),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Row(
+      children: [
+        _quickActionTile(
+          icon: Icons.add_card_rounded,
+          label: 'Card Baru',
+          color: const Color(0xFF6366F1),
+          onTap: () {
+            setState(() => _selectedIndex = 1); // ke KanbanBoard
+          },
+        ),
+        const SizedBox(width: 10),
+        _quickActionTile(
+          icon: Icons.timer_rounded,
+          label: 'Fokus 25m',
+          color: const Color(0xFFEC4899),
+          onTap: () {
+            // TODO: buka Pomodoro
+          },
+        ),
+        const SizedBox(width: 10),
+        _quickActionTile(
+          icon: Icons.style_rounded,
+          label: 'Review',
+          color: const Color(0xFF10B981),
+          onTap: () {
+            // TODO: buka flashcard review
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _quickActionTile({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: color, size: 24),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -582,86 +1229,6 @@ class _DashboardState extends State<Dashboard> {
     return Container(height: 24, width: 1, color: const Color(0xFFE2E8F0));
   }
 
-  Widget _buildAchievementCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFEF3C7),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.emoji_events_outlined,
-              color: Color(0xFFD97706),
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: const [
-                    Text(
-                      '0 Pencapaian Tercapai',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 18,
-                      color: Color(0xFF94A3B8),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: const LinearProgressIndicator(
-                          value: 0.0,
-                          backgroundColor: Color(0xFFF1F5F9),
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Color(0xFFF59E0B),
-                          ),
-                          minHeight: 6,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      '0/0',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFD97706),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildLearningPatternCard() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -869,81 +1436,105 @@ class _DashboardState extends State<Dashboard> {
 
   Widget _buildTodaysTaskList() {
     final tasks = _todaysTasks;
-
-    if (tasks.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-        ),
-        child: const Center(
-          child: Text(
-            'Tidak ada tugas yang dijadwalkan untuk hari ini.',
-            style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-          ),
-        ),
-      );
-    }
-
-    // 1. Pisahkan tugas menjadi 2 kategori
-    final uncompletedTasks = tasks.where((card) {
-      final col = (card.computedColumn ?? 'planning').toLowerCase();
-      return col != 'reflection';
-    }).toList();
-
-    final completedTasks = tasks.where((card) {
-      final col = (card.computedColumn ?? 'planning').toLowerCase();
-      return col == 'reflection';
-    }).toList();
-
-    // 2. Tampilkan keduanya secara bersamaan dalam Column
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // --- KATEGORI 1: BELUM SELESAI ---
-        if (uncompletedTasks.isNotEmpty) ...[
-          const Text(
-            'Belum Selesai',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF64748B),
+        Row(
+          children: [
+            const Text('📌', style: TextStyle(fontSize: 18)),
+            const SizedBox(width: 8),
+            Text(
+              'Tugas Hari Ini',
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF0F172A),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          ...uncompletedTasks.map(
-            (card) => _buildTaskCardItem(card, isDone: false),
-          ),
-          const SizedBox(height: 16),
-        ],
-
-        // --- KATEGORI 2: SELESAI (REFLECTION) ---
-        if (completedTasks.isNotEmpty) ...[
-          const Text(
-            'Selesai (Reflection)',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF16A34A),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFDBEAFE),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '${tasks.length}',
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2563EB),
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          ...completedTasks.map(
-            (card) => _buildTaskCardItem(card, isDone: true),
-          ),
-        ],
-
-        // Jika kedua list kosong (seharusnya tertangani oleh tasks.isEmpty di atas, tapi untuk berjaga-jaga)
-        if (uncompletedTasks.isEmpty && completedTasks.isEmpty)
-          const Center(
-            child: Text(
-              'Tidak ada tugas hari ini.',
-              style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-            ),
-          ),
+            const Spacer(),
+            if (tasks.isNotEmpty)
+              TextButton(
+                onPressed: () => setState(() => _selectedIndex = 1),
+                child: const Text(
+                  'Lihat Semua',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2563EB),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (tasks.isEmpty) _emptyTasksCTA() else _buildTodaysTaskList(),
       ],
+    );
+  }
+
+  Widget _emptyTasksCTA() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        children: [
+          const Text('✨', style: TextStyle(fontSize: 32)),
+          const SizedBox(height: 10),
+          const Text(
+            'Belum ada tugas hari ini',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Yuk mulai dengan buat 1 card belajar!',
+            style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 14),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6366F1),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+            onPressed: () => setState(() => _selectedIndex = 1),
+            icon: const Icon(Icons.add_rounded, size: 16, color: Colors.white),
+            label: const Text(
+              'Buat Card Pertamamu',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

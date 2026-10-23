@@ -12,10 +12,16 @@ import 'app_config.dart';
 class LoginService {
   Future<User?> login(String email, String password) async {
     try {
-      final discovered = await MdnsHelper.discoverService();
-      final baseUrl = discovered != null
-          ? "http://$discovered:3000/api/auth"
-          : ApiConstants.getApiBaseUrl('/auth');
+      String baseUrl;
+      try {
+        final discovered = await MdnsHelper.discoverService();
+        baseUrl = discovered != null
+            ? "http://$discovered:3000/api/auth"
+            : ApiConstants.getApiBaseUrl('/auth');
+      } catch (e) {
+        debugPrint("mDNS discovery failed: $e");
+        baseUrl = ApiConstants.getApiBaseUrl('/auth');
+      }
       final url = Uri.parse('$baseUrl/login');
       debugPrint('Mencoba login ke URL: $url');
 
@@ -79,6 +85,50 @@ class LoginService {
     }
   }
 
+  Future<User?> loginWithGoogle(String idToken) async {
+    try {
+      String baseUrl;
+      try {
+        final discovered = await MdnsHelper.discoverService();
+        baseUrl = discovered != null
+            ? "http://$discovered:3000/api/auth"
+            : ApiConstants.getApiBaseUrl('/auth');
+      } catch (e) {
+        debugPrint("mDNS discovery failed: $e");
+        baseUrl = ApiConstants.getApiBaseUrl('/auth');
+      }
+      final url = Uri.parse('$baseUrl/login/google');
+      debugPrint('Mencoba login ke URL: $url');
+
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'idToken': idToken}),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final user = User.fromJson(data['user']);
+        user.token = data['token'];
+
+        await SecureTokenStorage.saveSession(
+          token: user.token ?? '',
+          refreshToken: user.refreshToken ?? '',
+          userJson: jsonEncode(user.toJson()),
+        );
+
+        return user;
+      } else {
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Login Google error: $e');
+      return null;
+    }
+  }
+
   Future<User?> tryAutoLogin() async {
     final token = await SecureTokenStorage.getToken();
     final userJsonStr = await SecureTokenStorage.getUserJson();
@@ -98,7 +148,16 @@ class LoginService {
 
   Future<User?> refreshAuthToken(String currentToken) async {
     try {
-      final baseUrl = ApiConstants.getApiBaseUrl('/auth');
+      String baseUrl;
+      try {
+        final discovered = await MdnsHelper.discoverService();
+        baseUrl = discovered != null
+            ? "http://$discovered:3000/api/auth"
+            : ApiConstants.getApiBaseUrl('/auth');
+      } catch (e) {
+        debugPrint("mDNS discovery failed: $e");
+        baseUrl = ApiConstants.getApiBaseUrl('/auth');
+      }
       final url = Uri.parse('$baseUrl/refresh');
       final response = await http.post(
         url,
@@ -135,5 +194,92 @@ class LoginService {
 
   Future<void> logout() async {
     await SecureTokenStorage.clearSession();
+  }
+
+  // Tambahkan method ini di dalam class LoginService di file loginService.dart
+
+  Future<bool> register({
+    required String fullName,
+    required String email,
+    required String password,
+  }) async {
+    try {
+      String baseUrl;
+      try {
+        final discovered = await MdnsHelper.discoverService();
+        baseUrl = discovered != null
+            ? "http://$discovered:3000/api/auth"
+            : ApiConstants.getApiBaseUrl('/auth');
+      } catch (e) {
+        debugPrint("mDNS discovery failed: $e");
+        baseUrl = ApiConstants.getApiBaseUrl('/auth');
+      }
+      final url = Uri.parse('$baseUrl/register');
+
+      // Memisah fullName menjadi firstName dan lastName
+      final nameParts = fullName.trim().split(' ');
+      final firstName = nameParts.first;
+      final lastName = nameParts.length > 1
+          ? nameParts.sublist(1).join(' ')
+          : '';
+
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'firstName': firstName,
+              'lastName': lastName,
+              'email': email,
+              'password': password,
+              'username': email.split('@').first,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      debugPrint('Register error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> registerWithGoogle({
+    required String email,
+    required String firstName,
+    required String lastName,
+    required String username,
+  }) async {
+    try {
+      String baseUrl;
+      try {
+        final discovered = await MdnsHelper.discoverService();
+        baseUrl = discovered != null
+            ? "http://$discovered:3000/api/auth"
+            : ApiConstants.getApiBaseUrl('/auth');
+      } catch (e) {
+        debugPrint("mDNS discovery failed: $e");
+        baseUrl = ApiConstants.getApiBaseUrl('/auth');
+      }
+      final url = Uri.parse('$baseUrl/register/google');
+
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'email': email,
+              'firstName': firstName,
+              'lastName': lastName,
+              'username': username,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      debugPrint('Register Google error: $e');
+      return false;
+    }
   }
 }

@@ -30,4 +30,16 @@ class Rekomendasi {
       answersPayload: json['answers_payload'] ?? json['answersPayload'] ?? {},
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'quiz_result_id': quizResultId,
+      'user_id': userId,
+      'dominant_strategy': dominantStrategy,
+      'user_profile': userProfile,
+      'unlocked_features': unlockedFeatures,
+      'locked_features': lockedFeatures,
+      'answers_payload': answersPayload,
+    };
+  }
 }

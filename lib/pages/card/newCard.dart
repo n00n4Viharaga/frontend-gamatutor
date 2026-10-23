@@ -103,7 +103,7 @@ class _AddCardViewState extends State<AddCardView> {
 
       setState(() {
         _strategies = results[0];
-        _unlockedFeatures = results[1] as List<String>;
+        _unlockedFeatures = (results[1]).map((e) => e.toString()).toList();
         _isLoadingStrategies = false;
       });
 
