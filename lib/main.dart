@@ -3,13 +3,15 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:gamatutor_kanban/service/middleware.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart'; // ★ Tambahan
+import 'package:gamatutor_kanban/utils/theme_provider.dart'; // ★ Tambahan
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // init timezone
   tz.initializeTimeZones();
 
   // init notification settings
@@ -20,18 +22,28 @@ Future<void> main() async {
   var status = await Permission.notification.request();
   print("Notification permission: $status");
 
-  runApp(const MyApp());
+  runApp(
+    // ★ BUNGKUS DENGAN PROVIDER AGAR TEMA BISA BERUBAH
+    ChangeNotifierProvider(
+      create: (_) => ThemeProvider(),
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
+    // ★ Ambil state tema saat ini
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
     return MaterialApp(
       title: 'Gamatutor Kanban',
       debugShowCheckedModeBanner: false,
+      
+      // ─── TEMA TERANG (LIGHT) ───
       theme: ThemeData(
         scaffoldBackgroundColor: const Color(0xFFF8FAFC),
         fontFamily: 'Roboto',
@@ -39,10 +51,25 @@ class MyApp extends StatelessWidget {
           seedColor: const Color(0xFF2563EB),
           primary: const Color(0xFF2563EB),
         ),
-        useMaterial3: true
+        useMaterial3: true,
       ),
-      home:  const AuthMiddleware(),
+
+      // ─── TEMA GELAP (DARK) ★ TAMBAHAN BARU ───
+      darkTheme: ThemeData(
+        scaffoldBackgroundColor: const Color(0xFF0F172A), // Background gelap
+        fontFamily: 'Roboto',
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF2563EB),
+          primary: const Color(0xFF2563EB),
+          brightness: Brightness.dark, // ★ Kunci Mode Gelap
+        ),
+        useMaterial3: true,
+      ),
+
+      // ★ Ini yang membuat aplikasi merespons switch di halaman Akun
+      themeMode: themeProvider.themeMode,
+
+      home: const AuthMiddleware(),
     );
   }
 }
-

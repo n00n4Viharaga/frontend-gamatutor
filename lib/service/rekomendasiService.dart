@@ -4,11 +4,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:gamatutor_kanban/model/Rekomendasi.dart';
 import 'package:gamatutor_kanban/model/quiz.dart';
-import 'package:gamatutor_kanban/service/MdnsHelper.dart';
 import 'package:http/http.dart' as http;
 import 'package:gamatutor_kanban/service/app_config.dart';
 import 'package:gamatutor_kanban/service/secureTokenStorage.dart';
-import 'package:gamatutor_kanban/service/app_config.dart';
 
 class rekomendasiService {
   // Mengambil unlocked features berdasarkan userId
@@ -17,10 +15,7 @@ class rekomendasiService {
     String token,
   ) async {
     try {
-      final discovered = await MdnsHelper.discoverService();
-      final baseUrl = discovered != null
-          ? "http://$discovered:3000/api/"
-          : ApiConstants.getApiBaseUrl('');
+      final baseUrl = await ApiConstants.getBaseUrl('');
       final response = await http
           .get(
             Uri.parse('$baseUrl/user-quiz-results/latest/$userId'),
@@ -61,10 +56,7 @@ class rekomendasiService {
   static Future<List<MslqQuestion>> getMslqQuestions() async {
     final token = await SecureTokenStorage.getToken();
     if (token == null) throw Exception('Sesi berakhir, login ulang.');
-    final discovered = await MdnsHelper.discoverService();
-    final baseUrl = discovered != null
-        ? "http://$discovered:3000/api/"
-        : ApiConstants.getApiBaseUrl('');
+    final baseUrl = await ApiConstants.getBaseUrl('');
     final response = await http
         .get(
           Uri.parse('$baseUrl/llmRekomen/questions'),
@@ -89,10 +81,7 @@ class rekomendasiService {
   static Future<Rekomendasi?> getLatestRecommendation(String userId) async {
     try {
       final token = await SecureTokenStorage.getToken();
-      final discovered = await MdnsHelper.discoverService();
-      final baseUrl = discovered != null
-          ? "http://$discovered:3000/api/"
-          : ApiConstants.getApiBaseUrl('');
+      final baseUrl = await ApiConstants.getBaseUrl('');
       final response = await http.get(
         Uri.parse('$baseUrl/user-quiz-results/latest/$userId'),
         headers: {
@@ -126,22 +115,20 @@ class rekomendasiService {
   ) async {
     final token = await SecureTokenStorage.getToken();
     if (token == null) throw Exception('Sesi berakhir, login ulang.');
-    final discovered = await MdnsHelper.discoverService();
-    final baseUrl = discovered != null
-        ? "http://$discovered:3000/api/"
-        : ApiConstants.getApiBaseUrl('');
-
-    final bodyData = jsonEncode({'answersPayload': answers});
+    final baseUrl = await ApiConstants.getBaseUrl('');
+    final bodyData = jsonEncode({'answers': answers});
     print("DEBUG SUBMIT QUIZ PAYLOAD: $bodyData"); // <-- CEK DI CONSOLE FLUTTER
 
-    final response = await http.post(
-      Uri.parse('$baseUrl/user-quiz-results'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: bodyData,
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/user-quiz-results/'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: bodyData,
+        )
+        .timeout(const Duration(seconds: 30));
 
     print("DEBUG RESPONSE STATUS: ${response.statusCode}");
     print(
@@ -164,10 +151,7 @@ class rekomendasiService {
   }) async {
     try {
       final token = await SecureTokenStorage.getToken();
-      final discovered = await MdnsHelper.discoverService();
-      final baseUrl = discovered != null
-          ? "http://$discovered:3000/api/"
-          : ApiConstants.getApiBaseUrl('');
+      final baseUrl = await ApiConstants.getBaseUrl('');
       final response = await http.post(
         Uri.parse('$baseUrl/llmRekomen/generate-feedback'),
         headers: {

@@ -10,6 +10,7 @@ class User {
   DateTime? createdAt;
   String? token;
   String? refreshToken;
+  int? xp;
 
   User({
     required this.userId,
@@ -22,7 +23,8 @@ class User {
     required this.archived,
     required this.createdAt,
     required this.token,
-    this.refreshToken
+    this.refreshToken,
+    this.xp = 0
   });
 
   // Getter pembantu untuk mengambil nama tampilan pengguna secara konsisten
@@ -47,7 +49,8 @@ class User {
     archived: json['archived'] ?? false,
     createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
     token: json['token'] ?? '',
-      refreshToken: json['refreshToken'] ?? json['refresh_token'] ?? ''
+    refreshToken: json['refreshToken'] ?? json['refresh_token'] ?? '',
+    xp: (json['xp'] as num?)?.toInt() ?? 0
     );
   }
 
@@ -63,7 +66,8 @@ class User {
       'archived': archived,
       'createdAt': createdAt?.toIso8601String(),
       'token': token,
-      'refreshToken': refreshToken
+      'refreshToken': refreshToken,
+      'xp' : xp
     };
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart' hide Card;
+import 'package:flutter/services.dart';
 import 'package:gamatutor_kanban/model/card.dart';
 import 'package:gamatutor_kanban/model/cardlist.dart';
 import 'package:gamatutor_kanban/pages/card/editCard.dart';
@@ -41,36 +42,83 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
 
   Future<void> _loadLearningStrategy() async {
     if (widget.card.learningId == null || widget.card.learningId!.isEmpty) {
-      setState(() {
-        _strategyName = 'Pomodoro';
-        _isLoadingStrategy = false;
-      });
+      if (mounted) {
+        setState(() {
+          _strategyName = 'Pomodoro';
+          _isLoadingStrategy = false;
+        });
+      }
       return;
     }
 
     try {
       final token = await SecureTokenStorage.getToken();
       if (token != null) {
-        final strategy = await CardService.getStrategyById(
-          token,
-          widget.card.learningId!,
-        );
-        setState(() {
-          _strategyName = strategy?.learningStrategy ?? 'Pomodoro';
-          _isLoadingStrategy = false;
-        });
+        final strategy = await CardService.getStrategyById(token, widget.card.learningId!);
+        if (mounted) {
+          setState(() {
+            _strategyName = strategy?.learningStrategy ?? 'Pomodoro';
+            _isLoadingStrategy = false;
+          });
+        }
       } else {
+        if (mounted) {
+          setState(() {
+            _strategyName = 'Pomodoro';
+            _isLoadingStrategy = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
           _strategyName = 'Pomodoro';
           _isLoadingStrategy = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _strategyName = 'Pomodoro';
-        _isLoadingStrategy = false;
-      });
     }
+  }
+
+  // ★ FUNGSI KONFIRMASI HAPUS
+  void _showDeleteConfirmation() {
+    HapticFeedback.mediumImpact();
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Row(
+          children: [
+            Text('🗑️', style: TextStyle(fontSize: 24)),
+            SizedBox(width: 8),
+            Text('Hapus Tugas?', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Text(
+          'Tugas ini akan dihapus permanen beserta seluruh subtask dan catatannya. Kamu yakin?',
+          style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Batal', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            onPressed: () {
+              Navigator.pop(dialogContext); // Tutup dialog
+              widget.onDeleteCard?.call(); // Panggil fungsi hapus dari parent (board.dart)
+              Navigator.pop(context, true); // Kembali ke Board
+            },
+            child: const Text('Ya, Hapus', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -78,345 +126,156 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
     final card = widget.card;
     final String currentColumn = card.computedColumn.toLowerCase();
 
+    final bool isTaskStarted = card.startTime != null;
     final bool isStrikeThroughEnabled = currentColumn != 'planning';
 
+    // Konfigurasi Tombol Bawah
     String bottomButtonText = 'Mulai Sesi Fokus';
-    Color bottomButtonColor = const Color(0xFF3B82F6);
-    VoidCallback? onBottomButtonPressed = () {};
-    bool isEditDeleteEnabled = true;
+    Color bottomButtonColor = const Color(0xFF6366F1);
+    VoidCallback? onBottomButtonPressed;
 
     if (currentColumn == 'planning') {
       bottomButtonText = 'Mulai Sesi Fokus';
-      bottomButtonColor = const Color(0xFF3B82F6);
-      onBottomButtonPressed = () {
-        showDialog(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            title: const Text(
-              'Mulai Belajar?',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            content: const Text(
-              'Kamu mau belajar card ini? Semua subtask akan langsung dimulai secara bersamaan.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text(
-                  'Batal',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4F46E5),
-                ),
-                onPressed: () async {
-                  Navigator.pop(dialogContext);
-
-                  try {
-                    final token = await SecureTokenStorage.getToken();
-                    if (token != null) {
-                      final nowStr = DateTime.now().toIso8601String();
-
-                      if (card.startTime == null) {
-                        await _cardService.updateCard(token, card.cardId!, {
-                          'nmMatkul': card.courseName ?? '',
-                          'title': card.title ?? '',
-                          'description': card.description ?? '',
-                          'learningId': card.learningId ?? '',
-                          'priority': card.priority ?? 'sedang',
-                          'difficulty': card.difficulty ?? 'sedang',
-                          'deadline': card.deadline != null
-                              ? card.deadline!.toIso8601String().split('T')[0]
-                              : null,
-                          'startTime': nowStr,
-                        });
-                      }
-
-                      for (var sub in card.subtasks) {
-                        if (sub.startTimeList == null && sub.clId != null) {
-                          await _cardService.updateCardList(
-                            token,
-                            card.cardId!,
-                            sub.clId!,
-                            {'subTitle': sub.subTitle, 'startTimeList': nowStr},
-                          );
-                          sub.startTimeList = DateTime.parse(nowStr);
-                        }
-                      }
-                      card.startTime = DateTime.parse(nowStr);
-                    }
-                  } catch (e) {
-                    debugPrint('Gagal mencatat start otomatis: $e');
-                  }
-
-                  if (!context.mounted) return;
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => FocusSessionPage(
-                        card: card,
-                        onStartSubtask: widget.onStartSubtask,
-                        onStopSubtask: widget.onStopSubtask,
-                        onNavigateToReflection: () {
-                          Navigator.pop(context);
-                          widget.onNavigateToReflection();
-                        },
-                      ),
-                    ),
-                  ).then((_) async {
-                    if (mounted) {
-                      try {
-                        final token = await SecureTokenStorage.getToken();
-                        if (token != null && card.cardId != null) {
-                          // Ambil semua cards lalu cari card dengan ID yang sama untuk memperbarui state lokal
-                          final updatedCards = await _cardService
-                              .getCardsByUser(token);
-                          final freshCard = updatedCards.firstWhere(
-                            (c) => c.cardId == card.cardId,
-                            orElse: () => card,
-                          );
-                          setState(() {
-                            widget.card.subtasks = freshCard.subtasks;
-                            widget.card.notes = freshCard.notes;
-                            widget.card.startTime = freshCard.startTime;
-                            widget.card.endTime = freshCard.endTime;
-                          });
-                        }
-                      } catch (e) {
-                        debugPrint('Gagal memperbarui data detail card: $e');
-                        setState(() {});
-                      }
-                    }
-                  });
-                },
-                child: const Text(
-                  'Ya, Mulai',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-        );
-      };
+      bottomButtonColor = const Color(0xFF6366F1);
+      onBottomButtonPressed = () => _handleStartSession();
     } else if (currentColumn == 'monitoring') {
-      bottomButtonText = 'Mulai Sesi Fokus';
+      bottomButtonText = 'Lanjut Sesi Fokus';
       bottomButtonColor = const Color(0xFF3B82F6);
-      onBottomButtonPressed = () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => FocusSessionPage(
-              card: card,
-              onStartSubtask: widget.onStartSubtask,
-              onStopSubtask: widget.onStopSubtask,
-              onNavigateToReflection: () {
-                Navigator.pop(context);
-                widget.onNavigateToReflection();
-              },
-            ),
-          ),
-        ).then((_) async{
-          if (mounted) {
-            try {
-              final token = await SecureTokenStorage.getToken();
-              if (token != null && card.cardId != null) {
-                // Ambil semua cards lalu cari card dengan ID yang sama untuk memperbarui state lokal
-                final updatedCards = await _cardService.getCardsByUser(token);
-                final freshCard = updatedCards.firstWhere(
-                  (c) => c.cardId == card.cardId,
-                  orElse: () => card,
-                );
-                setState(() {
-                  widget.card.subtasks = freshCard.subtasks;
-                  widget.card.notes = freshCard.notes;
-                  widget.card.startTime = freshCard.startTime;
-                  widget.card.endTime = freshCard.endTime;
-                });
-              }
-            } catch (e) {
-              debugPrint('Gagal memperbarui data detail card: $e');
-              setState(() {});
-            }
-          }
-        });
-      };
+      onBottomButtonPressed = () => _handleResumeSession();
     } else if (currentColumn == 'controlling') {
       bottomButtonText = 'Mulai Reflection';
       bottomButtonColor = const Color(0xFF10B981);
       onBottomButtonPressed = widget.onNavigateToReflection;
-      isEditDeleteEnabled = false;
     } else if (currentColumn == 'reflection') {
-      bottomButtonText = 'Completed';
+      bottomButtonText = 'Tugas Selesai 🎉';
       bottomButtonColor = const Color(0xFF10B981);
       onBottomButtonPressed = null;
-      isEditDeleteEnabled = false;
     }
 
     final totalSub = card.subtasks.length;
-    final completedSub = card.subtasks
-        .where((s) => s.endTimeList != null)
-        .length;
+    final completedSub = card.subtasks.where((s) => s.endTimeList != null).length;
     final double progressRatio = totalSub > 0 ? (completedSub / totalSub) : 0.0;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF8FAFC), // Background abu terang
       appBar: AppBar(
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
           child: CircleAvatar(
-            backgroundColor: const Color(0xFFF1F5F9),
+            backgroundColor: Colors.white,
             child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.black, size: 18),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 18),
               onPressed: () => Navigator.pop(context, true),
             ),
           ),
         ),
         title: const Text(
-          'Task Details',
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          'Detail Tugas 📝',
+          style: TextStyle(color: Color(0xFF0F172A), fontSize: 18, fontWeight: FontWeight.w900),
         ),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Status Column Badge
+            // ═══════════════════════════════════════════
+            // 1. HEADER (Status, Title, Strategy)
+            // ═══════════════════════════════════════════
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFFFEF3C7),
-                borderRadius: BorderRadius.circular(6),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.show_chart,
-                    size: 12,
-                    color: Color(0xFFD97706),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.show_chart_rounded, size: 14, color: Color(0xFFD97706)),
+                            const SizedBox(width: 4),
+                            Text(
+                              currentColumn.toUpperCase(),
+                              style: const TextStyle(color: Color(0xFFD97706), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Strategy Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3E8FF),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.bolt_rounded, size: 14, color: Color(0xFF9333EA)),
+                            const SizedBox(width: 4),
+                            _isLoadingStrategy
+                                ? const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 2))
+                                : Text(
+                                    _strategyName ?? 'Pomodoro',
+                                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: Color(0xFF9333EA)),
+                                  ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(height: 16),
                   Text(
-                    currentColumn.toUpperCase(),
-                    style: const TextStyle(
-                      color: Color(0xFFD97706),
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    card.title ?? 'Tanpa Judul',
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), height: 1.3),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    card.courseName ?? 'Mata Kuliah',
+                    style: const TextStyle(fontSize: 14, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-
-            // Title
-            Text(
-              card.title ?? 'Tanpa Judul',
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
-              ),
-            ),
             const SizedBox(height: 16),
 
-            // Badge Strategy
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF3E8FF),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.bolt,
-                        size: 14,
-                        color: Color(0xFF9333EA),
-                      ),
-                      const SizedBox(width: 4),
-                      _isLoadingStrategy
-                          ? const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Color(0xFF9333EA),
-                              ),
-                            )
-                          : Text(
-                              'Strategy: ${_strategyName ?? 'Pomodoro'}',
-                              style: const TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF9333EA),
-                              ),
-                            ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Due Date & Priority Boxes
+            // ═══════════════════════════════════════════
+            // 2. BENTO GRID: Due Date & Priority
+            // ═══════════════════════════════════════════
             Row(
               children: [
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: const [
-                            Icon(
-                              Icons.calendar_today_outlined,
-                              size: 12,
-                              color: Colors.grey,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              'Due Date',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                color: Colors.grey,
-                              ),
-                            ),
+                        const Row(
+                          children: [
+                            Icon(Icons.calendar_today_rounded, size: 14, color: Color(0xFF94A3B8)),
+                            SizedBox(width: 6),
+                            Text('Deadline', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold)),
                           ],
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 8),
                         Text(
-                          card.deadline != null
-                              ? '${card.deadline!.day}/${card.deadline!.month}/${card.deadline!.year}'
-                              : 'Tidak ada',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFDC2626),
-                          ),
+                          card.deadline != null ? '${card.deadline!.day}/${card.deadline!.month}/${card.deadline!.year}' : 'Tidak ada',
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFFEF4444)),
                         ),
                       ],
                     ),
@@ -425,42 +284,24 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: const [
-                            Icon(
-                              Icons.flag_outlined,
-                              size: 12,
-                              color: Colors.grey,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              'Priority',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                color: Colors.grey,
-                              ),
-                            ),
+                        const Row(
+                          children: [
+                            Icon(Icons.flag_rounded, size: 14, color: Color(0xFF94A3B8)),
+                            SizedBox(width: 6),
+                            Text('Prioritas', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold)),
                           ],
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 8),
                         Text(
-                          card.priority != null
-                              ? card.priority!.toUpperCase()
-                              : 'MEDIUM',
+                          card.priority?.toUpperCase() ?? 'MEDIUM',
                           style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: card.priority?.toLowerCase() == 'high'
-                                ? const Color(0xFFEA580C)
-                                : const Color(0xFFD97706),
+                            fontSize: 14, fontWeight: FontWeight.w900,
+                            color: card.priority?.toLowerCase() == 'high' ? const Color(0xFFEF4444) : const Color(0xFFF59E0B),
                           ),
                         ),
                       ],
@@ -471,383 +312,381 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
             ),
             const SizedBox(height: 16),
 
-            // Description Section
-            const Text(
-              'Description',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                (card.description != null && card.description!.isNotEmpty)
-                    ? card.description!
-                    : 'Tidak ada deskripsi.',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF64748B),
-                  height: 1.4,
-                ),
-              ),
-            ),
-
-            // --- NOTES SECTION (CATATAN DARI SESI FOKUS) ---
-            if (card.notes != null && card.notes!.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              const Text(
-                'Catatan Sesi Fokus (Notes)',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: Color(0xFF0F172A),
-                ),
-              ),
-              const SizedBox(height: 6),
+            // ═══════════════════════════════════════════
+            // 3. DESKRIPSI & CATATAN
+            // ═══════════════════════════════════════════
+            if (card.description != null && card.description!.isNotEmpty) ...[
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEF3C7),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFFDE68A)),
-                ),
-                child: Row(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
-                      Icons.note_alt_outlined,
-                      size: 16,
-                      color: Color(0xFFD97706),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        card.notes!,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF92400E),
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
+                    const Text('Deskripsi 📄', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+                    const SizedBox(height: 8),
+                    Text(card.description!, style: const TextStyle(fontSize: 13, color: Color(0xFF334155), height: 1.5)),
                   ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            if (card.notes != null && card.notes!.isNotEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFFDE68A))),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.note_alt_rounded, size: 16, color: Color(0xFFD97706)),
+                        SizedBox(width: 6),
+                        Text('Catatan Fokus', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFD97706))),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(card.notes!, style: const TextStyle(fontSize: 13, color: Color(0xFF92400E), height: 1.5, fontStyle: FontStyle.italic)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // ═══════════════════════════════════════════
+            // 4. SUBTASKS
+            // ═══════════════════════════════════════════
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Langkah Kecil 🪜', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
+                      Text('$completedSub/$totalSub', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF3B82F6))),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      value: currentColumn == 'planning' ? 0.0 : progressRatio,
+                      backgroundColor: const Color(0xFFF1F5F9),
+                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                      minHeight: 8,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  if (card.subtasks.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Text('Belum ada langkah kecil.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    )
+                  else
+                    ...card.subtasks.map((subtask) {
+                      final bool isDone = isStrikeThroughEnabled && (subtask.endTimeList != null);
+                      final bool isStarted = subtask.startTimeList != null;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isDone ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: isDone ? const Color(0xFFDCFCE7) : const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              isDone ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                              color: isDone ? const Color(0xFF10B981) : Colors.grey.shade400,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                subtask.subTitle ?? '',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isDone ? FontWeight.normal : FontWeight.w600,
+                                  color: isDone ? const Color(0xFF94A3B8) : const Color(0xFF334155),
+                                  decoration: isDone ? TextDecoration.lineThrough : TextDecoration.none,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            
+                            // Tombol Play/Stop Subtask
+                            if (!isStarted && !isDone)
+                              InkWell(
+                                onTap: () async {
+                                  await widget.onStartSubtask(card, subtask);
+                                  if (mounted) setState(() {});
+                                },
+                                borderRadius: BorderRadius.circular(20),
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: const BoxDecoration(color: Color(0xFF6366F1), shape: BoxShape.circle),
+                                  child: const Icon(Icons.play_arrow_rounded, size: 16, color: Colors.white),
+                                ),
+                              ),
+                            if (isStarted && !isDone)
+                              InkWell(
+                                onTap: () async {
+                                  await widget.onStopSubtask(card, subtask);
+                                  if (mounted) setState(() {});
+                                },
+                                borderRadius: BorderRadius.circular(20),
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: const BoxDecoration(color: Color(0xFFEF4444), shape: BoxShape.circle),
+                                  child: const Icon(Icons.stop_rounded, size: 16, color: Colors.white),
+                                ),
+                              ),
+                            if (isDone)
+                              const Text('Selesai', style: TextStyle(fontSize: 10, color: Color(0xFF10B981), fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ═══════════════════════════════════════════
+            // 5. REFERENCES (URL)
+            // ═══════════════════════════════════════════
+            if (card.urlCount > 0) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Link Referensi 🔗', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
+                    const SizedBox(height: 12),
+                    ...card.urlList.map((urlItem) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0))),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.link_rounded, size: 16, color: Color(0xFF3B82F6)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                urlItem,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF3B82F6), decoration: TextDecoration.underline),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ],
+        ),
+      ),
+      
+      // ═══════════════════════════════════════════
+      // BOTTOM NAVIGATION BAR (FLOATING STYLE)
+      // ═══════════════════════════════════════════
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 20, offset: Offset(0, -4))],
+        ),
+        child: SafeArea(
+          child: Row(
+            children: [
+              // Tombol Edit
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: IconButton(
+                  onPressed: (currentColumn == 'controlling' || currentColumn == 'reflection')
+                      ? null // Disable edit jika sudah selesai
+                      : () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => EditTaskPage(
+                                card: widget.card,
+                                onSaveUpdatedCard: (updatedCard) {
+                                  if (widget.onEditCard != null) {
+                                    widget.onEditCard!(updatedCard);
+                                  }
+                                },
+                              ),
+                            ),
+                          );
+                          if (mounted) {
+                            setState(() => _isLoadingStrategy = true);
+                            _loadLearningStrategy();
+                          }
+                        },
+                  icon: Icon(
+                    Icons.edit_rounded,
+                    color: (currentColumn == 'controlling' || currentColumn == 'reflection')
+                        ? Colors.grey.shade400
+                        : const Color.fromARGB(255, 81, 84, 241),
+                    size: 20,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              
+              // Tombol Utama (Fokus/Reflection)
+              Expanded(
+                child: SizedBox(
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: onBottomButtonPressed,
+                    icon: Icon(
+                      currentColumn == 'planning' || currentColumn == 'monitoring' 
+                          ? Icons.play_circle_fill_rounded 
+                          : Icons.rate_review_rounded, 
+                      color: Colors.white, 
+                      size: 20
+                    ),
+                    label: Text(
+                      bottomButtonText,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: bottomButtonColor,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+
+              // Tombol Hapus
+              Container(
+                decoration: BoxDecoration(
+                  color: isTaskStarted ? const Color(0xFFF1F5F9) : const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: IconButton(
+                  // ★ LOGIKA HAPUS: Jika sudah mulai (startTime != null), tombol mati.
+                  onPressed: isTaskStarted ? null : _showDeleteConfirmation,
+                  icon: Icon(
+                    Icons.delete_outline_rounded,
+                    color: isTaskStarted ? Colors.grey.shade400 : const Color(0xFFEF4444),
+                    size: 20,
+                  ),
                 ),
               ),
             ],
-            const SizedBox(height: 20),
-
-            // Subtasks Section dengan Progress Bar
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Subtasks',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: Color(0xFF0F172A),
-                  ),
-                ),
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 50,
-                      height: 4,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          value: currentColumn == 'planning'
-                              ? 0.0
-                              : progressRatio,
-                          backgroundColor: const Color(0xFFE2E8F0),
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFF3B82F6),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      currentColumn == 'planning'
-                          ? '0/$totalSub'
-                          : '$completedSub/$totalSub',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Render Subtasks Dinamis
-            if (card.subtasks.isEmpty)
-              const Text(
-                'Tidak ada subtask.',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              )
-            else
-              ...card.subtasks.map((subtask) {
-                final bool isDone =
-                    isStrikeThroughEnabled && (subtask.endTimeList != null);
-                final bool isStarted = subtask.startTimeList != null;
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          subtask.subTitle ?? '',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDone
-                                ? const Color(0xFF94A3B8)
-                                : const Color(0xFF334155),
-                            decoration: isDone
-                                ? TextDecoration.lineThrough
-                                : TextDecoration.none,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-
-                      if (!isStarted && !isDone)
-                        SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: IconButton(
-                            onPressed: () async {
-                              await widget.onStartSubtask(card, subtask);
-                              if (context.mounted) setState(() {});
-                            },
-                            icon: const Icon(
-                              Icons.play_arrow_rounded,
-                              size: 14,
-                              color: Colors.white,
-                            ),
-                            padding: EdgeInsets.zero,
-                            style: IconButton.styleFrom(
-                              backgroundColor: const Color(0xFF4F46E5),
-                              shape: const CircleBorder(),
-                            ),
-                          ),
-                        ),
-
-                      if (isStarted && !isDone)
-                        SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: IconButton(
-                            onPressed: () async {
-                              await widget.onStopSubtask(card, subtask);
-                              if (context.mounted) setState(() {});
-                            },
-                            icon: const Icon(
-                              Icons.stop_rounded,
-                              size: 14,
-                              color: Colors.white,
-                            ),
-                            padding: EdgeInsets.zero,
-                            style: IconButton.styleFrom(
-                              backgroundColor: const Color(0xFFEF4444),
-                              shape: const CircleBorder(),
-                            ),
-                          ),
-                        ),
-
-                      if (isDone)
-                        const Text(
-                          'Selesai',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.green,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              }),
-
-            const SizedBox(height: 20),
-
-            // References Section
-            const Text(
-              'References',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (card.urlCount == 0)
-              const Text(
-                'Tidak ada lampiran URL.',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              )
-            else
-              ...card.urlList.map((urlItem) {
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFF6FF),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(
-                          Icons.link,
-                          size: 16,
-                          color: Color(0xFF3B82F6),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          urlItem,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E293B),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
-        ),
-        child: Row(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: IconButton(
-                onPressed: isEditDeleteEnabled
-                    ? () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => EditTaskPage(
-                              card: widget.card,
-                              onSaveUpdatedCard: (updatedCard) {
-                                if (widget.onEditCard != null) {
-                                  widget.onEditCard!(updatedCard);
-                                }
-                              },
-                            ),
-                          ),
-                        );
-                        setState(() {
-                          _isLoadingStrategy = true;
-                        });
-                        _loadLearningStrategy();
-                      }
-                    : null,
-                icon: Icon(
-                  Icons.edit_outlined,
-                  color: isEditDeleteEnabled
-                      ? const Color(0xFF64748B)
-                      : Colors.grey.shade300,
-                  size: 18,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: SizedBox(
-                height: 48,
-                child: ElevatedButton.icon(
-                  onPressed: onBottomButtonPressed,
-                  icon: const Icon(
-                    Icons.play_circle_outline,
-                    color: Colors.white,
-                    size: 18,
-                  ),
-                  label: Text(
-                    bottomButtonText,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: bottomButtonColor,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEF2F2),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFFECACA)),
-              ),
-              child: IconButton(
-                onPressed: isEditDeleteEnabled ? widget.onDeleteCard : null,
-                icon: Icon(
-                  Icons.delete_outline,
-                  color: isEditDeleteEnabled
-                      ? const Color(0xFFEF4444)
-                      : Colors.grey.shade300,
-                  size: 18,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  // Fungsi untuk memulai sesi fokus dari planning
+  void _handleStartSession() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Mulai Belajar? 🚀', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: const Text('Kamu mau belajar card ini? Semua subtask akan langsung dimulai secara bersamaan.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              try {
+                final token = await SecureTokenStorage.getToken();
+                if (token != null) {
+                  final nowStr = DateTime.now().toIso8601String();
+                  if (widget.card.startTime == null) {
+                    await _cardService.updateCard(token, widget.card.cardId!, {
+                      'nmMatkul': widget.card.courseName ?? '',
+                      'title': widget.card.title ?? '',
+                      'description': widget.card.description ?? '',
+                      'learningId': widget.card.learningId ?? '',
+                      'priority': widget.card.priority ?? 'sedang',
+                      'difficulty': widget.card.difficulty ?? 'sedang',
+                      'deadline': widget.card.deadline != null ? widget.card.deadline!.toIso8601String().split('T')[0] : null,
+                      'startTime': nowStr,
+                    });
+                  }
+                  for (var sub in widget.card.subtasks) {
+                    if (sub.startTimeList == null && sub.clId != null) {
+                      await _cardService.updateCardList(token, widget.card.cardId!, sub.clId!, {'subTitle': sub.subTitle, 'startTimeList': nowStr});
+                      sub.startTimeList = DateTime.parse(nowStr);
+                    }
+                  }
+                  widget.card.startTime = DateTime.parse(nowStr);
+                }
+              } catch (e) {
+                debugPrint('Gagal mencatat start otomatis: $e');
+              }
+
+              if (!mounted) return;
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => FocusSessionPage(
+                    card: widget.card,
+                    onStartSubtask: widget.onStartSubtask,
+                    onStopSubtask: widget.onStopSubtask,
+                    onNavigateToReflection: () {
+                      Navigator.pop(context);
+                      widget.onNavigateToReflection();
+                    },
+                  ),
+                ),
+              ).then((_) {
+                if (mounted) setState(() {});
+              });
+            },
+            child: const Text('Ya, Mulai', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Fungsi untuk lanjut sesi fokus dari monitoring
+  void _handleResumeSession() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FocusSessionPage(
+          card: widget.card,
+          onStartSubtask: widget.onStartSubtask,
+          onStopSubtask: widget.onStopSubtask,
+          onNavigateToReflection: () {
+            Navigator.pop(context);
+            widget.onNavigateToReflection();
+          },
+        ),
+      ),
+    ).then((_) {
+      if (mounted) setState(() {});
+    });
   }
 }

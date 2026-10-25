@@ -1,45 +1,64 @@
-// lib/models/user_quiz_result_model.dart
 class Rekomendasi {
-  final String quizResultId;
-  final String userId;
-  final String dominantStrategy;
-  final String userProfile;
+  final bool hasQuiz;
+  final String? userProfile;
+  final String? dominantStrategy;
   final List<String> unlockedFeatures;
   final List<String> lockedFeatures;
-  final Map<String, dynamic> answersPayload;
+  
+  // ★ TAMBAHKAN INI
+  final Map<String, double> normalizedScores; 
 
   Rekomendasi({
-    required this.quizResultId,
-    required this.userId,
-    required this.dominantStrategy,
-    required this.userProfile,
-    required this.unlockedFeatures,
-    required this.lockedFeatures,
-    required this.answersPayload,
+    required this.hasQuiz,
+    this.userProfile,
+    this.dominantStrategy,
+    this.unlockedFeatures = const [],
+    this.lockedFeatures = const [],
+    this.normalizedScores = const {}, // Default kosong
   });
 
   factory Rekomendasi.fromJson(Map<String, dynamic> json) {
+    List<String> parseList(dynamic v) {
+      if (v is List) return v.map((e) => e.toString()).toList();
+      return const [];
+    }
+
+    final userProfile = json['userProfile'] as String?;
+
+    // ★ EKSTRAK SKOR DARI ANSWERS_PAYLOAD (Ranked)
+    final Map<String, double> scores = {};
+    final answersPayload = json['answersPayload'];
+    if (answersPayload is Map<String, dynamic>) {
+      final ranked = answersPayload['ranked'];
+      if (ranked is List) {
+        for (final item in ranked) {
+          if (item is Map && item['category'] != null) {
+            scores[item['category'].toString()] = (item['score'] as num?)?.toDouble() ?? 0.0;
+          }
+        }
+      }
+    }
+
     return Rekomendasi(
-      quizResultId: json['quiz_result_id'] ?? json['quizResultId'] ?? '',
-      userId: json['user_id'] ?? json['userId'] ?? '',
-      dominantStrategy: json['dominant_strategy'] ?? json['dominantStrategy'] ?? '',
-      userProfile: json['user_profile'] ?? json['userProfile'] ?? '',
-      // Pastikan aman jika null dengan mengembalikan list kosong
-      unlockedFeatures: List<String>.from(json['unlocked_features'] ?? json['unlockedFeatures'] ?? []),
-      lockedFeatures: List<String>.from(json['locked_features'] ?? json['lockedFeatures'] ?? []),
-      answersPayload: json['answers_payload'] ?? json['answersPayload'] ?? {},
+      hasQuiz: userProfile != null && userProfile.isNotEmpty,
+      userProfile: userProfile,
+      dominantStrategy: json['dominantStrategy'] as String?,
+      unlockedFeatures: parseList(json['unlockedFeatures']),
+      lockedFeatures: parseList(json['lockedFeatures']),
+      normalizedScores: scores, // ★ Masukkan hasil ekstrak ke sini
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'quiz_result_id': quizResultId,
-      'user_id': userId,
-      'dominant_strategy': dominantStrategy,
-      'user_profile': userProfile,
-      'unlocked_features': unlockedFeatures,
-      'locked_features': lockedFeatures,
-      'answers_payload': answersPayload,
+      'hasQuiz': hasQuiz,
+      'userProfile': userProfile,
+      'dominantStrategy': dominantStrategy,
+      'unlockedFeatures': unlockedFeatures,
+      'lockedFeatures': lockedFeatures,
+      'normalizedScores': normalizedScores,
     };
   }
+
+  String get displayName => userProfile ?? 'Learner';
 }

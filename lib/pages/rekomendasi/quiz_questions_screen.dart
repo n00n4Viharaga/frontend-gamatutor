@@ -1,11 +1,9 @@
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:gamatutor_kanban/model/Rekomendasi.dart';
 import 'package:gamatutor_kanban/model/quiz.dart';
 import 'package:gamatutor_kanban/pages/rekomendasi/recommendation_dashboard_screen.dart';
 import 'package:gamatutor_kanban/service/rekomendasiService.dart';
-import 'package:gamatutor_kanban/service/secureTokenStorage.dart';
 
 const _categoryMeta = {
   'organization': (Color(0xFF6366F1), Icons.grid_view_rounded, 'Atur Strategi'),
@@ -42,6 +40,8 @@ class _QuizQuestionsScreenState extends State<QuizQuestionsScreen> {
 
   final Map<int, int> selectedScores = {};
   final Map<int, int> selectedOptionIndices = {};
+
+  bool _showLoadingOverlay = false;
 
   @override
   void initState() {
@@ -92,14 +92,17 @@ class _QuizQuestionsScreenState extends State<QuizQuestionsScreen> {
     if (_isAdvancing) return;
     _isAdvancing = true;
 
-    HapticFeedback.mediumImpact(); // ⚡ feedback taktil
+    HapticFeedback.mediumImpact();
+
+    final prevScore = selectedScores[currentIndex];
     setState(() {
       selectedOptionIndices[currentIndex] = optionIndex;
       selectedScores[currentIndex] = score;
-      xp += 10 + (score == 3 ? 5 : 0); // bonus XP untuk pilihan ideal
+
+      if (prevScore != null) xp -= 10 + (prevScore == 3 ? 5 : 0);
+      xp += 10 + (score == 3 ? 5 : 0);
     });
 
-    // Tunggu animasi seleksi selesai sebelum lanjut
     await Future.delayed(const Duration(milliseconds: 380));
     if (!mounted) return;
 
@@ -108,7 +111,12 @@ class _QuizQuestionsScreenState extends State<QuizQuestionsScreen> {
         duration: const Duration(milliseconds: 380),
         curve: Curves.easeOutCubic,
       );
-      setState(() => currentIndex++);
+      if (!mounted) return;
+
+      setState(() {
+        currentIndex++;
+        _isAdvancing = false; // ⭐ RESET — ini kunci
+      });
     } else {
       _finishQuiz();
     }
@@ -122,10 +130,17 @@ class _QuizQuestionsScreenState extends State<QuizQuestionsScreen> {
 
     HapticFeedback.heavyImpact();
     _confettiController.play();
-    await Future.delayed(const Duration(milliseconds: 1200));
+
+    // Munculkan layar loading animasi
+    setState(() {
+      _showLoadingOverlay = true;
+    });
+
+    await Future.delayed(
+      const Duration(milliseconds: 1500),
+    ); // Biarkan confetti jalan dulu
     if (!mounted) return;
-    await _submitQuizResult(); // ✅ tunggu sampai selesai
-    // _submitting tetap true karena widget akan di-pop/di-replace
+    await _submitQuizResult();
   }
 
   Future<void> _submitQuizResult() async {
@@ -140,6 +155,10 @@ class _QuizQuestionsScreenState extends State<QuizQuestionsScreen> {
       final hasil = await rekomendasiService.submitQuiz(payload);
       if (!mounted) return;
 
+      setState(() {
+        _showLoadingOverlay = false;
+      });
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -149,6 +168,11 @@ class _QuizQuestionsScreenState extends State<QuizQuestionsScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _isAdvancing = false;
+        _showLoadingOverlay = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Gagal submit: $e'),
@@ -159,6 +183,7 @@ class _QuizQuestionsScreenState extends State<QuizQuestionsScreen> {
   }
 
   void _goBack() {
+    if (_isAdvancing) return;
     if (currentIndex > 0) {
       _pageController.previousPage(
         duration: const Duration(milliseconds: 300),
@@ -175,46 +200,61 @@ class _QuizQuestionsScreenState extends State<QuizQuestionsScreen> {
     if (isLoading) return _loadingScreen();
     if (questions.isEmpty) return _emptyScreen();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFC),
-      body: Stack(
-        children: [
-          SafeArea(
-            child: Column(
-              children: [
-                _topBar(),
-                _storyProgressBar(),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: PageView.builder(
-                    controller: _pageController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: questions.length,
-                    itemBuilder: (context, index) =>
-                        _questionPage(index, questions[index]),
+    return PopScope(
+      canPop: !_showLoadingOverlay,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _showLoadingOverlay) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Sabar ya, Coach AI sedang menyusun strategimu... 🧠✨',
+              ),
+              backgroundColor: Color(0xFF8B5CF6),
+            ),
+          );
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFAFAFC),
+        body: Stack(
+          children: [
+            SafeArea(
+              child: Column(
+                children: [
+                  _topBar(),
+                  _storyProgressBar(),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: PageView.builder(
+                      controller: _pageController,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: questions.length,
+                      itemBuilder: (context, index) =>
+                          _questionPage(index, questions[index]),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          // Confetti overlay (tampil saat selesai)
-          Align(
-            alignment: Alignment.topCenter,
-            child: ConfettiWidget(
-              confettiController: _confettiController,
-              blastDirectionality: BlastDirectionality.explosive,
-              numberOfParticles: 30,
-              emissionFrequency: 0.05,
-              colors: const [
-                Color(0xFF6366F1),
-                Color(0xFFEC4899),
-                Color(0xFF10B981),
-                Color(0xFFF59E0B),
-                Color(0xFF06B6D4),
-              ],
+            // Confetti overlay (tampil saat selesai)
+            Align(
+              alignment: Alignment.topCenter,
+              child: ConfettiWidget(
+                confettiController: _confettiController,
+                blastDirectionality: BlastDirectionality.explosive,
+                numberOfParticles: 30,
+                emissionFrequency: 0.05,
+                colors: const [
+                  Color(0xFF6366F1),
+                  Color(0xFFEC4899),
+                  Color(0xFF10B981),
+                  Color(0xFFF59E0B),
+                  Color(0xFF06B6D4),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -254,6 +294,64 @@ class _QuizQuestionsScreenState extends State<QuizQuestionsScreen> {
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text('Coba lagi'),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingOverlay() {
+    return Container(
+      color: const Color(0xFF0F172A)
+          .withOpacity(0.95), // Background gelap transparan
+      child: Center(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0.8, end: 1.2),
+          duration: const Duration(milliseconds: 800),
+          curve: Curves.easeInOut,
+          builder: (context, scale, child) {
+            return Transform.scale(scale: scale, child: child);
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Ikon Robot AI dengan efek memantul
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF8B5CF6).withOpacity(0.5),
+                      blurRadius: 40,
+                    ),
+                  ],
+                ),
+                child: const Text('🤖', style: TextStyle(fontSize: 60)),
+              ),
+              const SizedBox(height: 32),
+              const Text(
+                'Menganalisis Profilmu...',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Coach AI sedang meracik strategi\nbelajar terbaik khusus buat kamu.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 32),
+              const CircularProgressIndicator(color: Color(0xFF8B5CF6)),
             ],
           ),
         ),

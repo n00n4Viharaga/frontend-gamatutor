@@ -1,14 +1,24 @@
 import 'dart:convert';
 
+import 'package:avatar_builder/avatar_builder.dart';
 import 'package:flutter/material.dart' hide Card;
+import 'package:gamatutor_kanban/model/Rekomendasi.dart';
+import 'package:gamatutor_kanban/model/avatar_models.dart';
 import 'package:gamatutor_kanban/model/user.dart';
-import 'package:gamatutor_kanban/pages/Auth/authwrapper.dart';
 import 'package:gamatutor_kanban/pages/card/board.dart';
+import 'package:gamatutor_kanban/pages/dashboard/account_screen.dart';
+import 'package:gamatutor_kanban/pages/dashboard/config/profile_meta.dart';
+import 'package:gamatutor_kanban/pages/dashboard/goals_screen.dart';
+import 'package:gamatutor_kanban/pages/dashboard/progress_screen.dart';
+import 'package:gamatutor_kanban/pages/dashboard/widgets/user_avatar_profile.dart';
 import 'package:gamatutor_kanban/service/SecureTokenStorage.dart';
+import 'package:gamatutor_kanban/service/avatarService.dart';
+import 'package:gamatutor_kanban/service/avatarService.dart' as AvatarService;
 import 'package:gamatutor_kanban/service/cardService.dart';
 import 'package:gamatutor_kanban/model/card.dart';
-import 'package:gamatutor_kanban/service/loginService.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:gamatutor_kanban/service/rekomendasiService.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
 
 class Dashboard extends StatefulWidget {
   final User? user;
@@ -16,19 +26,6 @@ class Dashboard extends StatefulWidget {
 
   @override
   State<Dashboard> createState() => _DashboardState();
-}
-
-class _Quest {
-  final String title;
-  final int done;
-  final int target;
-  final int xpReward;
-
-  const _Quest(this.title, this.done, this.target, {this.xpReward = 15});
-
-  // ─── Getter kenyamanan ───
-  bool get isCompleted => done >= target;
-  double get progress => target == 0 ? 0.0 : (done / target).clamp(0.0, 1.0);
 }
 
 class _Achievement {
@@ -41,6 +38,8 @@ class _Achievement {
 class _DashboardState extends State<Dashboard> {
   int _selectedIndex = 0;
   User? _currentUser;
+  Rekomendasi? _quizProfile;
+  bool _isLoadingProfile = true;
   bool _isLoading = true;
   final bool _isSpeedDialOpen = false;
 
@@ -61,26 +60,65 @@ class _DashboardState extends State<Dashboard> {
     }
   }
 
-  // ─── Level & XP derived dari completed cards ───
-  int get _xp => _completedTaskCount * 50; // 50 XP per card done
-  int get _xpTarget => (_xp ~/ 500 + 1) * 500; // target next level
-  int get _level => (_xp ~/ 500) + 1;
+  Map<String, dynamic> _getStrategyInfo(String? key) {
+    switch (key?.toLowerCase()) {
+      case 'organization':
+        return {'name': 'Organization', 'emoji': '🏗️'};
+      case 'time_management':
+        return {'name': 'Time Management', 'emoji': '⚔️'};
+      case 'metacognitive_self_regulation':
+        return {'name': 'Metacognitive', 'emoji': '🪞'};
+      case 'help_seeking':
+        return {'name': 'Help Seeking', 'emoji': '🤝'};
+      case 'elaboration':
+        return {'name': 'Elaboration', 'emoji': '🧠'};
+      case 'rehearsal':
+        return {'name': 'Rehearsal', 'emoji': '📚'};
+      default:
+        return {'name': 'Misterius', 'emoji': '❓'};
+    }
+  }
+
+  // ─── XP derived dari completed cards ───
+  int get _xp => _currentUser?.xp ?? 0;
+  int get _xpTarget => (_xp ~/ 500 + 1) * 500;
 
   // ─── Streak derived (sementara) ───
-  // Idealnya dari card_column_movements per hari, tapi jika belum ada,
-  // minimal tampilkan "hari ini sudah aktif"
+  // Idealnya dari card_column_movements per hari, tapi jika belum ada
   int get _streakDays {
     if (_cardsList.isEmpty) return 0;
-    // Logic: jika ada card yang dibuat/modified hari ini
+    final dates =
+        _cardsList
+            .where((c) => c.columnMovements == 'reflection')
+            .map((c) => c.reflectionCompletedAt) // ← sesuaikan field
+            .whereType<DateTime>()
+            .map(
+              (d) => DateTime(d.year, d.month, d.day),
+            ) // normalize ke date-only
+            .toSet() // dedup (multiple card/hari)
+            .toList()
+          ..sort((a, b) => b.compareTo(a)); // descending: terbaru dulu
+
+    if (dates.isEmpty) return 0;
+
     final today = DateTime.now();
-    final hasTodayActivity = _cardsList.any((c) {
-      final d = c.createdAt ?? c.startTime;
-      if (d == null) return false;
-      return d.year == today.year &&
-          d.month == today.month &&
-          d.day == today.day;
-    });
-    return hasTodayActivity ? 1 : 0;
+    final todayNorm = DateTime(today.year, today.month, today.day);
+    final daysSinceLast = todayNorm.difference(dates.first).inDays;
+
+    if (daysSinceLast > 1) return 0;
+
+    int streak = 1;
+    DateTime prev = dates.first;
+    for (int i = 1; i < dates.length; i++) {
+      final diff = prev.difference(dates[i]).inDays;
+      if (diff == 1) {
+        streak++;
+        prev = dates[i];
+      } else {
+        break;
+      }
+    }
+    return streak;
   }
 
   // ─── Achievement milestones derived ───
@@ -98,18 +136,8 @@ class _DashboardState extends State<Dashboard> {
     ];
   }
 
-  // ─── Profil fallback dari greeting ───
-  String get _profileLabel {
-    // Idealnya dari quizResult.userProfile
-    // Fallback: "Learner" atau username
-    return 'Learner';
-  }
-
-  final _dailyQuests = [
-    _Quest('Buat 1 card baru hari ini', 0, 1),
-    _Quest('Tandai 1 card selesai', 0, 1),
-    _Quest('Belajar minimal 15 menit', 0, 1),
-  ];
+  Avataaar? _currentAvatar;
+  bool _isLoadingAvatar = true;
 
   @override
   void initState() {
@@ -118,7 +146,30 @@ class _DashboardState extends State<Dashboard> {
     if (_currentUser == null) {
       _restoreUserFromStorage();
     }
-    _loadDashboardData();
+    _loadAllData();
+    _loadAvatar();
+  }
+
+  Future<void> _loadAvatar() async {
+    try {
+      final configJson = await AvatarService.getUserAvatarConfig();
+      if (configJson != null) {
+        final config = AvatarConfig.fromJson(configJson);
+        setState(() {
+          _currentAvatar = config.toAvataaar();
+        });
+      } else {
+        setState(() {
+          _currentAvatar = Avataaar.random(); // Default jika belum punya
+        });
+      }
+    } catch (e) {
+      setState(() => _isLoadingAvatar = false);
+    }
+  }
+
+  Future<void> _loadAllData() async {
+    await Future.wait([_loadDashboardData(), _loadQuizProfile()]);
   }
 
   Future<void> _restoreUserFromStorage() async {
@@ -128,6 +179,32 @@ class _DashboardState extends State<Dashboard> {
       setState(() {
         _currentUser = User.fromJson(userData);
       });
+    }
+  }
+
+  Future<void> _loadQuizProfile() async {
+    try {
+      final token = await SecureTokenStorage.getToken();
+
+      if (token == null) {
+        setState(() => _isLoadingProfile = false);
+        return;
+      }
+
+      // Ekstrak userId langsung dari token JWT yang tersimpan
+      Map<String, dynamic> decodedToken = JwtDecoder.decode(token);
+      final String userId = decodedToken['userId'] ?? decodedToken['id'];
+
+      final profile = await rekomendasiService.getLatestRecommendation(userId);
+      if (mounted) {
+        setState(() {
+          _quizProfile = profile;
+          _isLoadingProfile = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Gagal load quiz profile: $e');
+      if (mounted) setState(() => _isLoadingProfile = false);
     }
   }
 
@@ -147,27 +224,19 @@ class _DashboardState extends State<Dashboard> {
           return;
         }
       } catch (e) {
+        print("🚨 ERROR LOAD DATA: $e");
         debugPrint('Koneksi ke database gagal: $e');
       }
     }
-
-    final now = DateTime.now();
 
     if (mounted) {
       setState(() => _isLoading = false);
     }
   }
 
-  int get _uncompletedTaskCount {
-    return _cardsList.where((card) {
-      final col = (card.computedColumn ?? 'planning').toLowerCase();
-      return col != 'reflection' && col != 'done' && col != 'completed';
-    }).length;
-  }
-
   int get _completedTaskCount {
     return _cardsList.where((card) {
-      final col = (card.computedColumn ?? 'planning').toLowerCase();
+      final col = (card.computedColumn).toLowerCase();
       return col == 'reflection' || col == 'done' || col == 'completed';
     }).length;
   }
@@ -234,23 +303,6 @@ class _DashboardState extends State<Dashboard> {
     }).toList();
   }
 
-  List<Card> _getCardsByColumnCategory(String category) {
-    return _cardsList.where((card) {
-      final col = card.computedColumn ?? 'planning';
-      return col == category;
-    }).toList();
-  }
-
-  Future<void> _handleLogout() async {
-    await LoginService().logout();
-    if (!mounted) return;
-
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const AuthWrapper()),
-      (route) => false,
-    );
-  }
-
   Widget _buildHomeView() {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -260,18 +312,139 @@ class _DashboardState extends State<Dashboard> {
         children: [
           _buildHeader(),
           const SizedBox(height: 20),
-          _buildHeroCard(), // ★ BARU: avatar + level + XP
+          _buildHeroCard(), // ★ BARU: avatar + XP
+          const SizedBox(height: 16),
+          _buildDynamicTrainingMission(),
           const SizedBox(height: 16),
           _buildProfileRadarCard(), // ★ BARU: radar chart MSLQ
-          const SizedBox(height: 16),
-          _buildDailyQuestCard(), // ★ BARU: daily quest
-          const SizedBox(height: 16),
-          _buildQuickActions(), // ★ BARU: quick actions
           const SizedBox(height: 16),
           _buildTodaysTaskList(), // ♻️ Refactor dari _buildTodaysTaskList
           const SizedBox(height: 16),
           _buildAchievementsScroll(), // ★ BARU: horizontal badges
           const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDynamicTrainingMission() {
+    // Jika belum ada profil kuis, jangan tampilkan apa-apa
+    if (_quizProfile == null || !_quizProfile!.hasQuiz)
+      return const SizedBox.shrink();
+
+    // 1. Ambil Strategi Terkuat (Dominant)
+    final strongestKey = _quizProfile!.dominantStrategy;
+    final strongestInfo = _getStrategyInfo(strongestKey);
+
+    // 2. Ambil Strategi Terlemah (Unlocked Features)
+    // Asumsi: unlockedFeatures berisi list kategori yang skornya < 60
+    final unlocked = _quizProfile!.unlockedFeatures;
+
+    // Jika tidak ada yang di-unlock (misal semua skornya tinggi), ambil dari 'weakest'
+    // Tapi untuk amannya, kita cek dulu apakah list-nya ada isinya.
+    final weakestKey = unlocked.isNotEmpty ? unlocked.first : null;
+    final weakestInfo = _getStrategyInfo(weakestKey);
+
+    // Jika tidak ada yang perlu diperbaiki, tampilkan pesan sukses
+    if (weakestKey == null) {
+      return Container(
+        margin: const EdgeInsets.only(top: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFECFDF5),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFF10B981)),
+        ),
+        child: Row(
+          children: [
+            const Text('🌟', style: TextStyle(fontSize: 24)),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Kemampuanmu sudah seimbang di semua aspek! Pertahankan performa belajarmu.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF047857),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 3. Render Kartu Dinamis
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.track_changes_rounded,
+                color: Color(0xFF8B5CF6),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Misi Pelatihanmu',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Teks Dinamis
+          RichText(
+            text: TextSpan(
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF475569),
+                height: 1.5,
+              ),
+              children: [
+                const TextSpan(text: 'Kamu sudah sangat hebat dalam '),
+                TextSpan(
+                  text: '${strongestInfo['name']} ${strongestInfo['emoji']}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF10B981),
+                  ), // Warna Hijau untuk kekuatan
+                ),
+                const TextSpan(
+                  text: '. Namun, grafik Radar Chart-mu menunjukkan bahwa ',
+                ),
+                TextSpan(
+                  text: '${weakestInfo['name']} ${weakestInfo['emoji']}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFEF4444),
+                  ), // Warna Merah untuk kelemahan
+                ),
+                const TextSpan(
+                  text: ' masih perlu ditingkatkan. Yuk, fokus latih itu bulan ini agar belajarmu lebih seimbang!',
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -370,22 +543,30 @@ class _DashboardState extends State<Dashboard> {
   }
 
   Widget _buildHeroCard() {
-    final firstName = _currentUser?.firstName ?? 'Kamu';
-    final initial = firstName.isNotEmpty ? firstName[0].toUpperCase() : '?';
+    final hasQuiz = _quizProfile?.hasQuiz ?? false;
     final progress = _xpTarget > 0 ? _xp / _xpTarget : 0.0;
 
+    final meta = resolveProfileMeta(
+      _quizProfile?.unlockedFeatures.last,
+      dominantStrategy: _quizProfile?.dominantStrategy,
+    );
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFEC4899)],
+          // ★ Gradient mengikuti warna profil!
+          colors: [
+            meta.color,
+            meta.color.withValues(alpha: 0.75),
+            meta.color.withValues(alpha: 0.55),
+          ],
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+            color: meta.color.withValues(alpha: 0.35),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
@@ -396,63 +577,97 @@ class _DashboardState extends State<Dashboard> {
         children: [
           Row(
             children: [
-              // Avatar dari inisial nama (tidak butuh backend)
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.25),
-                  border: Border.all(color: Colors.white, width: 3),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  initial,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
+              // ★ Avatar emoji profil
+              _currentAvatar != null
+                  ? UserAvatarProfile(
+                      avatar: _currentAvatar!,
+                      size: 80,
+                      isCircle:
+                          true, // Widget ini otomatis bikin bentuk lingkaran
+                    )
+                  : Container(
+                      // Ini tampilan sementara (Skeleton/Loading) saat avatar belum selesai di-fetch dari API
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: 0.2),
+                      ),
+                      child: const Center(
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      ),
+                    ),
+
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.25),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        'LEVEL $_level',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 11,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Halo, $firstName!',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        height: 1.2,
-                      ),
+                    // ★ Nama profil + emoji
+                    Row(
+                      children: [
+                        if (hasQuiz) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  meta.emoji,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  meta.displayName,
+                                  style: TextStyle(
+                                    color: meta.color,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color.fromARGB(
+                                255,
+                                6,
+                                0,
+                                0,
+                              ).withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'Profil belum terpetakan',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.85),
+                                fontSize: 11,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              // Streak pill (derived)
+              // Streak pill (tidak berubah)
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -480,8 +695,42 @@ class _DashboardState extends State<Dashboard> {
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          // XP bar
+
+          // ★ Tagline profil (1 baris di bawah avatar)
+          if (hasQuiz) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.lightbulb_outline_rounded,
+                    color: Colors.white.withValues(alpha: 0.9),
+                    size: 14,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      meta.description,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 16),
+          // XP Bar (tidak berubah)
           Row(
             children: [
               const Icon(Icons.bolt_rounded, color: Colors.white, size: 16),
@@ -516,7 +765,6 @@ class _DashboardState extends State<Dashboard> {
             ),
           ),
           const SizedBox(height: 14),
-          // Stats (semua dari data existing)
           Row(
             children: [
               _heroMiniStat('📚', '${_cardsList.length}', 'Cards'),
@@ -557,22 +805,25 @@ class _DashboardState extends State<Dashboard> {
   }
 
   Widget _buildProfileRadarCard() {
+    final Map<String, double> rawScores = _quizProfile?.normalizedScores ?? {};
     // Data dummy — nanti dari backend (normalized_scores)
     final scores = {
-      'organization': 50.0,
-      'time_management': 25.0,
-      'metacognitive': 38.0,
-      'help_seeking': 63.0,
-      'elaboration': 88.0,
-      'rehearsal': 13.0,
+      'organization': rawScores['organization'] ?? 0.0,
+      'time_management': rawScores['time_management'] ?? 0.0,
+      // Sesuaikan key 'metacognitive_self_regulation' dengan array categories di bawah
+      'metacognitive_self_regulation':
+          rawScores['metacognitive_self_regulation'] ?? 0.0,
+      'help_seeking': rawScores['help_seeking'] ?? 0.0,
+      'elaboration': rawScores['elaboration'] ?? 0.0,
+      'rehearsal': rawScores['rehearsal'] ?? 0.0,
     };
     final labels = [
-      'Organisasi',
-      'Waktu',
-      'Metakognitif',
-      'Bantuan',
-      'Elaborasi',
-      'Latihan',
+      'Organisasi 🏗️',
+      'Waktu ⚔️',
+      'Metakognitif 🪞',
+      'Bantuan 🤝',
+      'Elaborasi 🧠',
+      'Latihan 📚',
     ];
     final values = scores.values.toList();
 
@@ -681,182 +932,6 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  Widget _buildDailyQuestCard() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFF7ED), Color(0xFFFEF3C7)],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFFED7AA)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text('🎯', style: TextStyle(fontSize: 20)),
-              const SizedBox(width: 8),
-              const Text(
-                'Misi Hari Ini',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF92400E),
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF59E0B),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Text(
-                  '+50 XP',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _questItem('Selesaikan 2 sesi Pomodoro', 0, 2),
-          const SizedBox(height: 10),
-          _questItem('Review 5 flashcard', 0, 5),
-          const SizedBox(height: 10),
-          _questItem('Buat 1 card baru', 0, 1),
-        ],
-      ),
-    );
-  }
-
-  Widget _questItem(String title, int done, int target) {
-    final progress = done / target;
-    final isDone = done >= target;
-    return Row(
-      children: [
-        Icon(
-          isDone ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
-          size: 18,
-          color: isDone ? const Color(0xFF16A34A) : const Color(0xFF92400E),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isDone
-                      ? const Color(0xFF16A34A)
-                      : const Color(0xFF78350F),
-                  decoration: isDone ? TextDecoration.lineThrough : null,
-                ),
-              ),
-              const SizedBox(height: 4),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 5,
-                  backgroundColor: Colors.white.withValues(alpha: 0.6),
-                  valueColor: AlwaysStoppedAnimation(
-                    isDone ? const Color(0xFF16A34A) : const Color(0xFFF59E0B),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          '$done/$target',
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF78350F),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildQuickActions() {
-    return Row(
-      children: [
-        _quickActionTile(
-          icon: Icons.add_card_rounded,
-          label: 'Card Baru',
-          color: const Color(0xFF6366F1),
-          onTap: () {
-            setState(() => _selectedIndex = 1); // ke KanbanBoard
-          },
-        ),
-        const SizedBox(width: 10),
-        _quickActionTile(
-          icon: Icons.timer_rounded,
-          label: 'Fokus 25m',
-          color: const Color(0xFFEC4899),
-          onTap: () {
-            // TODO: buka Pomodoro
-          },
-        ),
-        const SizedBox(width: 10),
-        _quickActionTile(
-          icon: Icons.style_rounded,
-          label: 'Review',
-          color: const Color(0xFF10B981),
-          onTap: () {
-            // TODO: buka flashcard review
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _quickActionTile({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color.withValues(alpha: 0.3)),
-          ),
-          child: Column(
-            children: [
-              Icon(icon, color: color, size: 24),
-              const SizedBox(height: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildPlaceholderView(String title) {
     return Center(
       child: Text(
@@ -881,13 +956,23 @@ class _DashboardState extends State<Dashboard> {
         currentBody = KanbanBoardView();
         break;
       case 2:
-        currentBody = _buildPlaceholderView('Goals Screen');
+        currentBody = const GoalsScreen();
         break;
       case 3:
-        currentBody = _buildPlaceholderView('Progress Screen');
+        currentBody = ProgressScreen(
+          cardsList: _cardsList,
+          quizProfile: _quizProfile,
+        );
         break;
       case 4:
-        currentBody = _buildPlaceholderView('Account Screen');
+        currentBody = AccountScreen(
+          currentUser: _currentUser,
+          quizProfile: _quizProfile,
+          userXp: _xp,
+          currentAvatar: _currentAvatar,
+          onAvatarUpdated: _loadAvatar
+        );
+        ;
         break;
       default:
         currentBody = _buildHomeView();
@@ -950,484 +1035,6 @@ class _DashboardState extends State<Dashboard> {
               ),
             ),
             const SizedBox(width: 8),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildQuoteCard() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '“ ',
-          style: TextStyle(
-            fontSize: 20,
-            color: Color(0xFF94A3B8),
-            fontWeight: FontWeight.bold,
-            height: 1.0,
-          ),
-        ),
-        Expanded(
-          child: Text(
-            'Belajar itu proses, bukan lomba. Mulai dari yang paling ringan.',
-            style: TextStyle(
-              fontSize: 12,
-              fontStyle: FontStyle.italic,
-              color: const Color(0xFF64748B).withValues(alpha: 0.9),
-              height: 1.3,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildQuestBanner() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0F7FF),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE0F2FE)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(
-              color: Color(0xFFDBEAFE),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.access_time_rounded,
-              size: 18,
-              color: Color(0xFF2563EB),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'Quest Segera Hadir',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E40AF),
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Petualangan baru sedang disiapkan — nantikan!',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF3B82F6)),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCharacterAndStatsCard() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16.0),
-            child: Row(
-              children: [
-                _buildStatItem(
-                  Icons.local_fire_department_outlined,
-                  '0',
-                  'Streak',
-                  Colors.orange,
-                ),
-                _buildVerticalDivider(),
-                // Dihitung dinamis dari durasi pergerakan 'todo' -> 'reflection'
-                _buildStatItem(
-                  Icons.timer_outlined,
-                  _formattedFocusDuration,
-                  'Fokus',
-                  Colors.blue,
-                ),
-                _buildVerticalDivider(),
-                _buildStatItem(
-                  Icons.close_rounded,
-                  '$_uncompletedTaskCount',
-                  'Belum Selesai',
-                  Colors.red,
-                ),
-                _buildVerticalDivider(),
-                // 2. Statistik Tugas Selesai (Ikon Checklist Hijau)
-                _buildStatItem(
-                  Icons.check_circle_rounded,
-                  '$_completedTaskCount',
-                  'Selesai',
-                  Colors.green,
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 12, right: 12, bottom: 12),
-            child: Container(
-              height: 220,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFEFF6FF)),
-              ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    top: 12,
-                    left: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFDBEAFE)),
-                      ),
-                      child: Row(
-                        children: const [
-                          Icon(
-                            Icons.shield_outlined,
-                            size: 14,
-                            color: Color(0xFF2563EB),
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            'Mulai Belajar',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF2563EB),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: const Icon(
-                        Icons.palette_outlined,
-                        size: 16,
-                        color: Color(0xFF64748B),
-                      ),
-                    ),
-                  ),
-                  Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const SizedBox(height: 20),
-                        Container(
-                          width: 80,
-                          height: 120,
-                          decoration: const BoxDecoration(
-                            image: DecorationImage(
-                              image: NetworkImage(
-                                'https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/People/Man%20Student.png',
-                              ),
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          width: 90,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            borderRadius: const BorderRadius.all(
-                              Radius.elliptical(90, 12),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.12),
-                                blurRadius: 10,
-                                spreadRadius: 1,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatItem(
-    IconData icon,
-    String value,
-    String label,
-    Color iconColor,
-  ) {
-    return Expanded(
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 16, color: iconColor),
-              const SizedBox(width: 4),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVerticalDivider() {
-    return Container(height: 24, width: 1, color: const Color(0xFFE2E8F0));
-  }
-
-  Widget _buildLearningPatternCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.psychology_outlined,
-                  color: Color(0xFF2563EB),
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'Pola Belajarmu',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-                  Text(
-                    'Berdasarkan 30 hari terakhir',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Center(
-            child: Column(
-              children: const [
-                Text(
-                  'Belum cukup data untuk menampilkan pola belajar',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Minimal 7 sesi belajar dalam 30 hari terakhir',
-                  style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPersonalBestCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF7ED),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.workspace_premium_outlined,
-                      color: Color(0xFFEA580C),
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'Personal Best',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
-                        ),
-                      ),
-                      Text(
-                        '3 sesi terlama kamu',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF94A3B8),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              TextButton(
-                onPressed: () {},
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: const Text(
-                  'Lihat semua',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2563EB),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Center(
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF8FAFC),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.bolt_rounded,
-                    color: Color(0xFFCBD5E1),
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Selesaikan minimal 1 sesi untuk lihat personal best',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTaskHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            const Text(
-              'Tugas Hari Ini',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFFDBEAFE),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '${_todaysTasks.length}',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF2563EB),
-                ),
-              ),
-            ),
           ],
         ),
       ],
@@ -1530,109 +1137,6 @@ class _DashboardState extends State<Dashboard> {
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTaskCardItem(Card card, {required bool isDone}) {
-    final col = (card.computedColumn ?? 'planning').toLowerCase();
-    final subtaskTitle = card.subtasks.isNotEmpty
-        ? card.subtasks.first.subTitle
-        : null;
-
-    Color badgeBg = const Color(0xFFF1F5F9);
-    Color badgeText = const Color(0xFF475569);
-    String badgeLabel = 'Planning';
-
-    switch (col) {
-      case 'reflection':
-        badgeBg = const Color(0xFFDCFCE7);
-        badgeText = const Color(0xFF166534);
-        badgeLabel = 'Reflection';
-        break;
-      case 'controlling':
-        badgeBg = const Color(0xFFE0E7FF);
-        badgeText = const Color(0xFF3730A3);
-        badgeLabel = 'Controlling';
-        break;
-      case 'monitoring':
-        badgeBg = const Color(0xFFFEF3C7);
-        badgeText = const Color(0xFF92400E);
-        badgeLabel = 'Monitoring';
-        break;
-      case 'planning':
-      default:
-        badgeBg = const Color(0xFFF1F5F9);
-        badgeText = const Color(0xFF475569);
-        badgeLabel = 'Planning';
-        break;
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Icon Berdasarkan Status: Checklist hijau jika selesai, Icon Close / Lingkaran jika belum
-          Icon(
-            isDone ? Icons.check_circle_rounded : Icons.close_rounded,
-            color: isDone ? const Color(0xFF16A34A) : const Color(0xFFEF4444),
-            size: 20,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  (card.title != null && card.title!.isNotEmpty
-                          ? card.title
-                          : subtaskTitle) ??
-                      'Tanpa Judul',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF0F172A),
-                    decoration: isDone ? TextDecoration.lineThrough : null,
-                  ),
-                ),
-                if (card.description != null &&
-                    card.description!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    card.description!,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF64748B),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: badgeBg,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              badgeLabel,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: badgeText,
               ),
             ),
           ),

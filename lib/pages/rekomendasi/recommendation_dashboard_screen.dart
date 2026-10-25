@@ -1,25 +1,40 @@
+import 'dart:convert';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:gamatutor_kanban/pages/dashboard/dashboard.dart';
+import 'package:gamatutor_kanban/service/aiService.dart';
+import 'package:gamatutor_kanban/service/app_config.dart';
 import 'package:gamatutor_kanban/service/rekomendasiService.dart';
+import 'package:gamatutor_kanban/service/secureTokenStorage.dart';
+import 'package:http/http.dart' as http;
+
 import 'widgets/llm_coach_card.dart';
 
 // ═══════════════════════════════════════════════════════════════
 // Meta kategori (konsisten dengan quiz screen)
 // ═══════════════════════════════════════════════════════════════
 const _catMeta = {
-  'organization':                 (Color(0xFF6366F1), Icons.grid_view_rounded,    'Organisasi'),
-  'time_management':              (Color(0xFFEC4899), Icons.schedule_rounded,     'Manajemen Waktu'),
-  'metacognitive_self_regulation':(Color(0xFF8B5CF6), Icons.psychology_rounded,   'Metakognitif'),
-  'help_seeking':                 (Color(0xFF06B6D4), Icons.support_rounded,      'Cari Bantuan'),
-  'elaboration':                  (Color(0xFFF59E0B), Icons.link_rounded,         'Elaborasi'),
-  'rehearsal':                    (Color(0xFF10B981), Icons.replay_rounded,       'Latihan'),
+  'organization': (Color(0xFF6366F1), Icons.grid_view_rounded, 'Organisasi'),
+  'time_management': (
+    Color(0xFFEC4899),
+    Icons.schedule_rounded,
+    'Manajemen Waktu',
+  ),
+  'metacognitive_self_regulation': (
+    Color(0xFF8B5CF6),
+    Icons.psychology_rounded,
+    'Metakognitif',
+  ),
+  'help_seeking': (Color(0xFF06B6D4), Icons.support_rounded, 'Cari Bantuan'),
+  'elaboration': (Color(0xFFF59E0B), Icons.link_rounded, 'Elaborasi'),
+  'rehearsal': (Color(0xFF10B981), Icons.replay_rounded, 'Latihan'),
 };
 
 class RecommendationDashboardScreen extends StatefulWidget {
   final Map<String, dynamic>? quizResultData;
   const RecommendationDashboardScreen({Key? key, this.quizResultData})
-      : super(key: key);
+    : super(key: key);
 
   @override
   State<RecommendationDashboardScreen> createState() =>
@@ -34,7 +49,7 @@ class _RecommendationDashboardScreenState
   @override
   void initState() {
     super.initState();
-    _fetchLlmFeedback();
+    _fetchFeedback();
   }
 
   // ─── Ekstrak skor ternormalisasi dari berbagai bentuk payload ───
@@ -74,19 +89,11 @@ class _RecommendationDashboardScreenState
     return {};
   }
 
-  Future<void> _fetchLlmFeedback() async {
-    setState(() => _isLoadingFeedback = true);
-    final data = widget.quizResultData;
-    final dominant = data?['dominant_strategy'] ?? 'time_management';
-    final profile = data?['user_profile'] ?? 'Learner';
-    final answers = data?['answers_payload'] ?? {};
-
-    final feedback = await rekomendasiService.generateLlmFeedback(
-      dominantStrategy: dominant,
-      userProfile: profile,
-      answersPayload: answers,
-    );
-
+   Future<void> _fetchFeedback() async {
+    final dominant = widget.quizResultData?['dominant_strategy'] ?? 'organization';
+    final profile = widget.quizResultData?['user_profile'] ?? 'Learner';
+    
+    final feedback = await AiService.getFirstTimeFeedback(dominant, profile);
     if (mounted) {
       setState(() {
         _llmFeedback = feedback;
@@ -97,10 +104,12 @@ class _RecommendationDashboardScreenState
 
   @override
   Widget build(BuildContext context) {
-    final profile = widget.quizResultData?['user_profile'] ??
+    final profile =
+        widget.quizResultData?['user_profile'] ??
         widget.quizResultData?['userProfile'] ??
         'The Learner';
-    final dominant = widget.quizResultData?['dominant_strategy'] ??
+    final dominant =
+        widget.quizResultData?['dominant_strategy'] ??
         widget.quizResultData?['dominantStrategy'] ??
         'organization';
     final unlocked = List<String>.from(
@@ -135,7 +144,7 @@ class _RecommendationDashboardScreenState
               LlmCoachCard(
                 feedbackText: _llmFeedback,
                 isLoading: _isLoadingFeedback,
-                onRefresh: _fetchLlmFeedback,
+                onRefresh: _fetchFeedback,
               ),
               const SizedBox(height: 24),
               _ctaButton(),
@@ -148,7 +157,8 @@ class _RecommendationDashboardScreenState
 
   // ─── Hero card dengan gradient + emoji ───
   Widget _heroCard(String profile, String dominant) {
-    final meta = _catMeta[dominant] ??
+    final meta =
+        _catMeta[dominant] ??
         (const Color(0xFF6366F1), Icons.emoji_events_rounded, 'Learner');
     return Container(
       width: double.infinity,
@@ -157,10 +167,7 @@ class _RecommendationDashboardScreenState
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            meta.$1,
-            meta.$1.withOpacity(0.65),
-          ],
+          colors: [meta.$1, meta.$1.withOpacity(0.65)],
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
@@ -186,23 +193,31 @@ class _RecommendationDashboardScreenState
               ),
               const Spacer(),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.25),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.workspace_premium_rounded,
-                        color: Colors.white, size: 16),
+                    Icon(
+                      Icons.workspace_premium_rounded,
+                      color: Colors.white,
+                      size: 16,
+                    ),
                     SizedBox(width: 4),
-                    Text('PROFIL KAMU',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5)),
+                    Text(
+                      'PROFIL KAMU',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -306,24 +321,25 @@ class _RecommendationDashboardScreenState
                   radarShape: RadarShape.polygon,
                   radarBackgroundColor: Colors.transparent,
                   borderData: FlBorderData(show: false),
-                  radarBorderData:
-                      BorderSide(color: Colors.grey.withOpacity(0.3)),
+                  radarBorderData: BorderSide(
+                    color: Colors.grey.withOpacity(0.3),
+                  ),
                   titlePositionPercentageOffset: 0.18,
                   titleTextStyle: const TextStyle(
                     color: Color(0xFF475569),
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
                   ),
-                  getTitle: (index, angle) => RadarChartTitle(
-                    text: _catMeta[categories[index]]!.$3,
-                  ),
+                  getTitle: (index, angle) =>
+                      RadarChartTitle(text: _catMeta[categories[index]]!.$3),
                   tickCount: 4,
-                  ticksTextStyle:
-                      const TextStyle(color: Colors.transparent),
-                  tickBorderData:
-                      BorderSide(color: Colors.grey.withOpacity(0.15)),
-                  gridBorderData:
-                      BorderSide(color: Colors.grey.withOpacity(0.15)),
+                  ticksTextStyle: const TextStyle(color: Colors.transparent),
+                  tickBorderData: BorderSide(
+                    color: Colors.grey.withOpacity(0.15),
+                  ),
+                  gridBorderData: BorderSide(
+                    color: Colors.grey.withOpacity(0.15),
+                  ),
                 ),
               ),
             )
@@ -349,7 +365,8 @@ class _RecommendationDashboardScreenState
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
           final cat = unlocked[index];
-          final meta = _catMeta[cat] ??
+          final meta =
+              _catMeta[cat] ??
               (const Color(0xFF6366F1), Icons.auto_awesome, cat);
           return Container(
             width: 150,
@@ -358,10 +375,7 @@ class _RecommendationDashboardScreenState
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  meta.$1.withOpacity(0.15),
-                  meta.$1.withOpacity(0.05),
-                ],
+                colors: [meta.$1.withOpacity(0.15), meta.$1.withOpacity(0.05)],
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: meta.$1.withOpacity(0.3), width: 1.5),
@@ -416,9 +430,10 @@ class _RecommendationDashboardScreenState
           elevation: 0,
         ),
         onPressed: () {
-          Navigator.push(
+          Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (_) => const Dashboard()),
+            (route) => false,
           );
         },
         child: const Row(

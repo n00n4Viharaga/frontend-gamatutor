@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:gamatutor_kanban/model/user.dart';
 import 'package:gamatutor_kanban/pages/Auth/authwrapper.dart';
+import 'package:gamatutor_kanban/pages/login/forgotPassword.dart';
 import 'package:gamatutor_kanban/pages/register/register.dart';
-import 'package:gamatutor_kanban/pages/dashboard/dashboard.dart';
 import 'package:gamatutor_kanban/service/loginService.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -285,15 +285,7 @@ class _LoginPageState extends State<LoginPage>
                         ),
                       ),
                       GestureDetector(
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Fitur Lupa Password dalam pengembangan',
-                              ),
-                            ),
-                          );
-                        },
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ForgotPasswordScreen())),
                         child: const Text(
                           'Forgot?',
                           style: TextStyle(
