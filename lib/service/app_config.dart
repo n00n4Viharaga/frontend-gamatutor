@@ -7,7 +7,7 @@ class ApiConstants {
     if (kIsWeb || defaultTargetPlatform == TargetPlatform.iOS) {
       return 'http://localhost:3000/api$path';
     }
-    return 'http://10.200.219.178:3000/api$path'; // device fisik
+    return 'http://10.73.11.148:3000/api$path'; // device fisik
   }
 
   static Future<String> getBaseUrl(String path) async {

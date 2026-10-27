@@ -124,27 +124,22 @@ const ProfileMeta kLearnerMeta = ProfileMeta(
   description: 'Ikuti kuis 24 soal untuk mengenali gaya belajarmu.',
 );
 
-/// Helper: cari metadata dari nama profil (case-insensitive, fuzzy)
 ProfileMeta resolveProfileMeta(String? profileName, {String? dominantStrategy}) {
-  // 1) Coba via dominant strategy (paling akurat)
   if (dominantStrategy != null && kProfileMeta.containsKey(dominantStrategy)) {
     return kProfileMeta[dominantStrategy]!;
   }
 
-  // 2) Coba via display name
-  if (profileName != null) {
-    for (final meta in kProfileMeta.values) {
-      if (meta.displayName.toLowerCase() == profileName.toLowerCase()) {
-        return meta;
-      }
+  if (profileName != null && profileName.isNotEmpty) {
+    final cleanName = profileName.toLowerCase().replaceAll(' ', '_').replaceAll('-', '_');
+    
+    if (kProfileMeta.containsKey(cleanName)) {
+      return kProfileMeta[cleanName]!;
     }
-    // Fuzzy match untuk All-Rounder
-    if (profileName.toLowerCase().contains('all-rounder') ||
-        profileName.toLowerCase().contains('all rounder')) {
+
+    if (cleanName.contains('all_rounder')) {
       return kProfileMeta['all_rounder']!;
     }
   }
 
-  // 3) Fallback
   return kLearnerMeta;
 }

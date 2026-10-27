@@ -4,9 +4,9 @@ class Rekomendasi {
   final String? dominantStrategy;
   final List<String> unlockedFeatures;
   final List<String> lockedFeatures;
-  
+
   // ★ TAMBAHKAN INI
-  final Map<String, double> normalizedScores; 
+  final Map<String, double> normalizedScores;
 
   Rekomendasi({
     required this.hasQuiz,
@@ -25,17 +25,17 @@ class Rekomendasi {
 
     final userProfile = json['userProfile'] as String?;
 
-    // ★ EKSTRAK SKOR DARI ANSWERS_PAYLOAD (Ranked)
     final Map<String, double> scores = {};
     final answersPayload = json['answersPayload'];
+
     if (answersPayload is Map<String, dynamic>) {
-      final ranked = answersPayload['ranked'];
-      if (ranked is List) {
-        for (final item in ranked) {
-          if (item is Map && item['category'] != null) {
-            scores[item['category'].toString()] = (item['score'] as num?)?.toDouble() ?? 0.0;
+      final rawScores = answersPayload['normalized_scores'];
+      if (rawScores is Map) {
+        rawScores.forEach((key, value) {
+          if (value is num) {
+            scores[key.toString()] = value.toDouble();
           }
-        }
+        });
       }
     }
 
@@ -45,7 +45,7 @@ class Rekomendasi {
       dominantStrategy: json['dominantStrategy'] as String?,
       unlockedFeatures: parseList(json['unlockedFeatures']),
       lockedFeatures: parseList(json['lockedFeatures']),
-      normalizedScores: scores, // ★ Masukkan hasil ekstrak ke sini
+      normalizedScores: scores
     );
   }
 

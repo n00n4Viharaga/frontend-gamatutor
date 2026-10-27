@@ -116,7 +116,9 @@ class rekomendasiService {
     final token = await SecureTokenStorage.getToken();
     if (token == null) throw Exception('Sesi berakhir, login ulang.');
     final baseUrl = await ApiConstants.getBaseUrl('');
-    final bodyData = jsonEncode({'answers': answers});
+    final bodyData = jsonEncode({
+      'answersPayload': answers,
+    });
     print("DEBUG SUBMIT QUIZ PAYLOAD: $bodyData"); // <-- CEK DI CONSOLE FLUTTER
 
     final response = await http

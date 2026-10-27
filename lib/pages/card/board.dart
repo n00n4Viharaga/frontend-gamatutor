@@ -7,6 +7,8 @@ import 'package:gamatutor_kanban/pages/card/taskDetail.dart';
 import 'package:gamatutor_kanban/service/SecureTokenStorage.dart';
 import 'package:gamatutor_kanban/service/cardService.dart';
 import 'package:confetti/confetti.dart';
+import 'package:gamatutor_kanban/service/rekomendasiService.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
 
 class KanbanBoardView extends StatefulWidget {
   const KanbanBoardView({super.key});
@@ -38,52 +40,31 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
   }
 
   Future<void> _saveCardToBackend(Map<String, dynamic> cardData) async {
-    try {
-      final token = await SecureTokenStorage.getToken();
-      if (token == null) return;
+    final token = await SecureTokenStorage.getToken();
+    if (token == null) throw Exception('Token tidak tersedia');
 
-      final createdCard = await _cardService.createCard(token, cardData);
+    final createdCard = await _cardService.createCard(token, cardData);
+    final String cardId =
+        (createdCard['card_id'] ?? createdCard['cardId'] ?? createdCard['id'])
+            .toString();
 
-      final String cardId =
-          (createdCard['card_id'] ?? createdCard['cardId'] ?? createdCard['id'])
-              .toString();
-
-      if (cardData['subtasks'] != null &&
-          (cardData['subtasks'] as List).isNotEmpty) {
-        for (var subTitle in cardData['subtasks']) {
-          await _cardService.createCardList(token, cardId, {
-            'subTitle': subTitle,
-          });
-        }
+    if (cardData['subtasks'] != null &&
+        (cardData['subtasks'] as List).isNotEmpty) {
+      for (var subTitle in cardData['subtasks']) {
+        await _cardService.createCardList(token, cardId, {
+          'subTitle': subTitle,
+        });
       }
+    }
 
-      if (cardData['collaborators'] != null &&
-          (cardData['collaborators'] as List).isNotEmpty) {
-        for (var friendUserId in cardData['collaborators']) {
-          await _cardService.addCollaborator(token, cardId, {
-            'friendId': friendUserId,
-            'role': 'member',
-          });
-        }
+    if (cardData['collaborators'] != null &&
+        (cardData['collaborators'] as List).isNotEmpty) {
+      for (var friendUserId in cardData['collaborators']) {
+        await _cardService.addCollaborator(token, cardId, {
+          'friendId': friendUserId,
+          'role': 'member',
+        });
       }
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Tugas baru berhasil ditambahkan ke Planning!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      Navigator.of(context).pop(true);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Gagal menyimpan tugas: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
@@ -189,7 +170,7 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                                   Icons.info_outline,
                                   color: Colors.grey,
                                 ),
-                                onPressed: () {},
+                                onPressed: _showStrategyInfo,
                               ),
                               IconButton(
                                 icon: const Icon(
@@ -349,7 +330,9 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                   });
                 },
                 child: AnimatedRotation(
-                  turns: _isFabExpanded ? 0.125 : 0, // ★ Putar 45 derajat (seperti tanda X)
+                  turns: _isFabExpanded
+                      ? 0.125
+                      : 0, // ★ Putar 45 derajat (seperti tanda X)
                   duration: const Duration(milliseconds: 250),
                   child: Icon(
                     _isFabExpanded ? Icons.add : Icons.add, // Ikon tetap plus, yang berputar adalah kontainernya
@@ -525,10 +508,12 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                     .length;
 
                 Color priorityColor = Colors.grey;
-                if (card.priority?.toLowerCase() == 'high') priorityColor = const Color(0xFFEF4444);
-                if (card.priority?.toLowerCase() == 'medium') priorityColor = const Color(0xFFF59E0B);
-                if (card.priority?.toLowerCase() == 'low') priorityColor = const Color(0xFF10B981);
-
+                if (card.priority?.toLowerCase() == 'high')
+                  priorityColor = const Color(0xFFEF4444);
+                if (card.priority?.toLowerCase() == 'medium')
+                  priorityColor = const Color(0xFFF59E0B);
+                if (card.priority?.toLowerCase() == 'low')
+                  priorityColor = const Color(0xFF10B981);
 
                 return GestureDetector(
                   onTap: () {
@@ -553,6 +538,20 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                               }
                             });
                           },
+                          onDeleteCard: () async {
+                            final token = await SecureTokenStorage.getToken();
+                            final ok = await _cardService.deleteCard(
+                              token!,
+                              card.cardId!,
+                            ); // ✅ API
+                            if (ok && mounted) {
+                              setState(
+                                () => _cards.removeWhere(
+                                  (c) => c.cardId == card.cardId,
+                                ),
+                              );
+                            }
+                          },
                         ),
                       ),
                     ).then((_) => _fetchKanbanCards());
@@ -563,7 +562,10 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey.shade100, width: 1.5),
+                      border: Border.all(
+                        color: Colors.grey.shade100,
+                        width: 1.5,
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.04),
@@ -574,16 +576,14 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(16),
-                      child: IntrinsicHeight( // ★ Wajib agar garis prioritas menyesuaikan tinggi card
+                      child: IntrinsicHeight(
+                        // ★ Wajib agar garis prioritas menyesuaikan tinggi card
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             // ★ 3. GARIS WARNA PRIORITAS DI SISI KIRI
-                            Container(
-                              width: 6,
-                              color: priorityColor,
-                            ),
-                            
+                            Container(width: 6, color: priorityColor),
+
                             // ★ 4. ISI CARD ANDA (Dibungkus Expanded)
                             Expanded(
                               child: Column(
@@ -592,31 +592,39 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                                   Padding(
                                     padding: const EdgeInsets.all(14),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
                                           children: [
                                             Expanded(
                                               child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
                                                 children: [
                                                   Text(
                                                     card.title ?? 'Tanpa Judul',
                                                     style: const TextStyle(
-                                                      fontWeight: FontWeight.bold,
+                                                      fontWeight:
+                                                          FontWeight.bold,
                                                       fontSize: 14,
                                                       color: Color(0xFF0F172A),
                                                     ),
                                                   ),
                                                   const SizedBox(height: 2),
                                                   Text(
-                                                    card.courseName ?? 'Mata Kuliah',
+                                                    card.courseName ??
+                                                        'Mata Kuliah',
                                                     style: TextStyle(
                                                       fontSize: 11,
-                                                      color: Colors.grey.shade600,
-                                                      fontWeight: FontWeight.w500,
+                                                      color:
+                                                          Colors.grey.shade600,
+                                                      fontWeight:
+                                                          FontWeight.w500,
                                                     ),
                                                   ),
                                                 ],
@@ -624,13 +632,17 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                                             ),
                                             if (totalSubtasks > 0)
                                               Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 4,
-                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4,
+                                                    ),
                                                 decoration: BoxDecoration(
-                                                  color: const Color(0xFFDBEAFE),
-                                                  borderRadius: BorderRadius.circular(12),
+                                                  color: const Color(
+                                                    0xFFDBEAFE,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
                                                 ),
                                                 child: Text(
                                                   colType == 'planning'
@@ -645,7 +657,8 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                                               ),
                                           ],
                                         ),
-                                        if (card.description != null && card.description!.isNotEmpty) ...[
+                                        if (card.description != null &&
+                                            card.description!.isNotEmpty) ...[
                                           const SizedBox(height: 8),
                                           Text(
                                             card.description!,
@@ -660,17 +673,23 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                                         if (card.subtasks.isNotEmpty) ...[
                                           const SizedBox(height: 10),
                                           ...card.subtasks.map((subtask) {
-                                            final bool isDone = subtask.endTimeList != null;
+                                            final bool isDone =
+                                                subtask.endTimeList != null;
 
                                             return Container(
-                                              margin: const EdgeInsets.symmetric(vertical: 3),
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 6,
-                                              ),
+                                              margin:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 3,
+                                                  ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 6,
+                                                  ),
                                               decoration: BoxDecoration(
                                                 color: Colors.grey.shade50,
-                                                borderRadius: BorderRadius.circular(8),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
                                               ),
                                               child: Row(
                                                 children: [
@@ -678,42 +697,86 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                                                     child: Text(
                                                       subtask.subTitle ?? '',
                                                       maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
                                                       style: TextStyle(
                                                         fontSize: 11.5,
-                                                        color: isDone ? Colors.grey.shade400 : Colors.grey.shade800,
-                                                        decoration: isDone ? TextDecoration.lineThrough : TextDecoration.none,
+                                                        color: isDone
+                                                            ? Colors
+                                                                  .grey
+                                                                  .shade400
+                                                            : Colors
+                                                                  .grey
+                                                                  .shade800,
+                                                        decoration: isDone
+                                                            ? TextDecoration
+                                                                  .lineThrough
+                                                            : TextDecoration
+                                                                  .none,
                                                       ),
                                                     ),
                                                   ),
                                                   const SizedBox(width: 8),
-                                                  if (subtask.startTimeList == null)
+                                                  if (subtask.startTimeList ==
+                                                      null)
                                                     SizedBox(
                                                       width: 28,
                                                       height: 28,
                                                       child: IconButton(
-                                                        onPressed: () => _handleStartSubtask(card, subtask),
-                                                        icon: const Icon(Icons.play_arrow_rounded, size: 16, color: Colors.white),
-                                                        padding: EdgeInsets.zero,
-                                                        constraints: const BoxConstraints(),
+                                                        onPressed: () =>
+                                                            _handleStartSubtask(
+                                                              card,
+                                                              subtask,
+                                                            ),
+                                                        icon: const Icon(
+                                                          Icons
+                                                              .play_arrow_rounded,
+                                                          size: 16,
+                                                          color: Colors.white,
+                                                        ),
+                                                        padding:
+                                                            EdgeInsets.zero,
+                                                        constraints:
+                                                            const BoxConstraints(),
                                                         style: IconButton.styleFrom(
-                                                          backgroundColor: const Color(0xFF4F46E5),
-                                                          shape: const CircleBorder(),
+                                                          backgroundColor:
+                                                              const Color(
+                                                                0xFF4F46E5,
+                                                              ),
+                                                          shape:
+                                                              const CircleBorder(),
                                                         ),
                                                       ),
                                                     ),
-                                                  if (subtask.startTimeList != null && subtask.endTimeList == null)
+                                                  if (subtask.startTimeList !=
+                                                          null &&
+                                                      subtask.endTimeList ==
+                                                          null)
                                                     SizedBox(
                                                       width: 28,
                                                       height: 28,
                                                       child: IconButton(
-                                                        onPressed: () => _handleStopSubtask(card, subtask),
-                                                        icon: const Icon(Icons.stop_rounded, size: 16, color: Colors.white),
-                                                        padding: EdgeInsets.zero,
-                                                        constraints: const BoxConstraints(),
+                                                        onPressed: () =>
+                                                            _handleStopSubtask(
+                                                              card,
+                                                              subtask,
+                                                            ),
+                                                        icon: const Icon(
+                                                          Icons.stop_rounded,
+                                                          size: 16,
+                                                          color: Colors.white,
+                                                        ),
+                                                        padding:
+                                                            EdgeInsets.zero,
+                                                        constraints:
+                                                            const BoxConstraints(),
                                                         style: IconButton.styleFrom(
-                                                          backgroundColor: const Color(0xFFEF4444),
-                                                          shape: const CircleBorder(),
+                                                          backgroundColor:
+                                                              const Color(
+                                                                0xFFEF4444,
+                                                              ),
+                                                          shape:
+                                                              const CircleBorder(),
                                                         ),
                                                       ),
                                                     ),
@@ -737,7 +800,8 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                                     ),
                                     color: const Color(0xFFF8FAFC),
                                     child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
                                         if (card.priority != null)
                                           Container(
@@ -746,8 +810,11 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                                               vertical: 2,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: priorityColor.withValues(alpha: 0.15),
-                                              borderRadius: BorderRadius.circular(6),
+                                              color: priorityColor.withValues(
+                                                alpha: 0.15,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
                                             ),
                                             child: Text(
                                               card.priority!.toUpperCase(),
@@ -761,7 +828,11 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                                         if (card.urlCount > 0)
                                           Row(
                                             children: [
-                                              Icon(Icons.link, size: 12, color: Colors.grey.shade500),
+                                              Icon(
+                                                Icons.link,
+                                                size: 12,
+                                                color: Colors.grey.shade500,
+                                              ),
                                               const SizedBox(width: 4),
                                               Text(
                                                 '${card.urlCount}',
@@ -774,8 +845,13 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                                           ),
                                         if (colType == 'controlling')
                                           ElevatedButton.icon(
-                                            onPressed: () => _showReflectionDialog(card),
-                                            icon: const Icon(Icons.rate_review_outlined, size: 12, color: Colors.white),
+                                            onPressed: () =>
+                                                _showReflectionDialog(card),
+                                            icon: const Icon(
+                                              Icons.rate_review_outlined,
+                                              size: 12,
+                                              color: Colors.white,
+                                            ),
                                             label: const Text(
                                               'Mulai Refleksi',
                                               style: TextStyle(
@@ -785,8 +861,14 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
                                               ),
                                             ),
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor: const Color(0xFF10B981),
-                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              backgroundColor: const Color(
+                                                0xFF10B981,
+                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 4,
+                                                  ),
                                               elevation: 0,
                                             ),
                                           ),
@@ -813,21 +895,28 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
   void _showAddCardDialog() async {
     final token = await SecureTokenStorage.getToken();
     if (token == null) return;
-    final result = await Navigator.push(
+
+    final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (context) => AddCardView(
           token: token,
           onCardCreated: (cardData) async {
-            await _saveCardToBackend(cardData);
-            _fetchKanbanCards();
+            await _saveCardToBackend(cardData); // ✅ await, bukan pop
           },
         ),
       ),
     );
 
-    if (result == true) {
-      _fetchKanbanCards();
+    if (result == true && mounted) {
+      await _fetchKanbanCards();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tugas baru berhasil ditambahkan ke Planning!'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 
@@ -1135,6 +1224,353 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
           },
         );
       },
+    );
+  }
+
+  Future<void> _showStrategyInfo() async {
+    // Loading dialog sementara
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF8B5CF6)),
+      ),
+    );
+
+    List<dynamic> strategies = [];
+    List<String> unlocked = [];
+    String? error;
+
+    try {
+      final token = await SecureTokenStorage.getToken();
+      if (token == null) throw Exception('Token tidak tersedia');
+
+      final decoded = JwtDecoder.decode(token);
+      final String userId =
+          decoded['userId'] ?? decoded['id'] ?? decoded['sub'];
+      if (userId.isEmpty) {
+        throw Exception('userId tidak ada di token');
+      }
+
+      // Ambil paralel: semua strategi + fitur yang di-unlock user
+      final results = await Future.wait([
+        CardService.getAllStrategies(),
+        rekomendasiService.getUnlockedFeatures(userId, token),
+      ]);
+
+      final allStrategies = results[0];
+      unlocked = (results[1]).map((e) => e.toString()).toList();
+
+      // ✅ Filter: hanya strategi yang keyCode-nya ada di unlocked
+      strategies = allStrategies.where((s) {
+        final keyCode = (s['keyCode'] ?? '').toString().toLowerCase();
+        return unlocked.any(
+          (u) =>
+              u.toLowerCase() == keyCode || u.toLowerCase().contains(keyCode),
+        );
+      }).toList();
+    } catch (e) {
+      error = e.toString();
+    }
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // tutup loading
+
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal memuat strategi: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (strategies.isEmpty) {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) => _buildEmptyStrategiesSheet(),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _buildStrategyInfoSheet(strategies),
+    );
+  }
+
+  Widget _buildEmptyStrategiesSheet() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const Text('🔒', style: TextStyle(fontSize: 56)),
+          const SizedBox(height: 16),
+          const Text(
+            'Belum Ada Strategi',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Kamu belum menyelesaikan kuis strategi belajar.\n'
+            'Ikuti kuis dulu untuk membuka strategi belajarmu.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                // Opsional: navigate ke QuizQuestionsScreen
+                // Navigator.push(context, MaterialPageRoute(builder: (_) => const QuizQuestionsScreen()));
+              },
+              child: const Text(
+                'Ikuti Kuis Sekarang',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStrategyInfoSheet(List<dynamic> strategies) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEEF2FF),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text('🧠', style: TextStyle(fontSize: 20)),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Strategi Belajarmu',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Strategi yang sudah kamu buka',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
+              Expanded(
+                child: ListView.separated(
+                  controller: scrollController,
+                  padding: const EdgeInsets.all(20),
+                  itemCount: strategies.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) =>
+                      _buildStrategyCard(strategies[index]),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStrategyCard(dynamic strategy) {
+    final String label = strategy['learningStrategy'] ?? 'Strategi';
+    final String keyCode = (strategy['keyCode'] ?? '').toString().toLowerCase();
+    final String description =
+        strategy['description'] ?? 'Belum ada deskripsi.';
+
+    // Emoji & warna berdasarkan jenis strategi
+    String emoji = '🔹';
+    Color color = const Color(0xFF6366F1);
+    Color bgColor = const Color(0xFFEEF2FF);
+    String category = 'Umum';
+
+    if (keyCode.contains('time')) {
+      emoji = '⏱️';
+      color = const Color(0xFFF59E0B);
+      bgColor = const Color(0xFFFFFBEB);
+      category = 'Manajemen Waktu';
+    } else if (keyCode.contains('help')) {
+      emoji = '🤝';
+      color = const Color(0xFFEC4899);
+      bgColor = const Color(0xFFFCE7F3);
+      category = 'Bantuan Sosial';
+    } else if (keyCode.contains('organization')) {
+      emoji = '🏗️';
+      color = const Color(0xFF3B82F6);
+      bgColor = const Color(0xFFDBEAFE);
+      category = 'Organisasi';
+    } else if (keyCode.contains('elaboration')) {
+      emoji = '🕸️';
+      color = const Color(0xFF8B5CF6);
+      bgColor = const Color(0xFFF3E8FF);
+      category = 'Elaborasi';
+    } else if (keyCode.contains('rehearsal')) {
+      emoji = '🧠';
+      color = const Color(0xFF10B981);
+      bgColor = const Color(0xFFECFDF5);
+      category = 'Hafalan';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Icon lingkaran
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Center(
+              child: Text(emoji, style: const TextStyle(fontSize: 24)),
+            ),
+          ),
+          const SizedBox(width: 14),
+
+          // Konten
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Badge kategori
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    category.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      color: color,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+
+                // Nama strategi
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 6),
+
+                // Deskripsi
+                Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: Color(0xFF475569),
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

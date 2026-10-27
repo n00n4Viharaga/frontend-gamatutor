@@ -11,7 +11,7 @@ import 'app_config.dart';
 class LoginService {
   Future<User?> login(String email, String password) async {
     try {
-      final baseUrl = await ApiConstants.getBaseUrl('/auth');
+      final baseUrl = await ApiConstants.getBaseUrl('');
       final url = Uri.parse('$baseUrl/auth/login');
       debugPrint('Mencoba login ke URL: $url');
 
@@ -74,7 +74,7 @@ class LoginService {
 
   Future<User?> loginWithGoogle(String idToken) async {
     try {
-      final baseUrl = await ApiConstants.getBaseUrl('/auth');
+      final baseUrl = await ApiConstants.getBaseUrl('');
       final url = Uri.parse('$baseUrl/auth/login/google');
       debugPrint('Mencoba login ke URL: $url');
 
@@ -126,7 +126,7 @@ class LoginService {
 
   Future<User?> refreshAuthToken(String currentToken) async {
     try {
-      final baseUrl = await ApiConstants.getBaseUrl('/auth');
+      final baseUrl = await ApiConstants.getBaseUrl('');
       final url = Uri.parse('$baseUrl/auth/refresh');
       final response = await http.post(
         url,
@@ -171,7 +171,7 @@ class LoginService {
     required String password,
   }) async {
     try {
-      final baseUrl = await ApiConstants.getBaseUrl('/auth');
+      final baseUrl = await ApiConstants.getBaseUrl('');
       final url = Uri.parse('$baseUrl/auth/register');
 
       // Memisah fullName menjadi firstName dan lastName
@@ -209,7 +209,7 @@ class LoginService {
     required String username,
   }) async {
     try {
-      final baseUrl = await ApiConstants.getBaseUrl('/auth');
+      final baseUrl = await ApiConstants.getBaseUrl('');
       final url = Uri.parse('$baseUrl/auth/register/google');
 
       final response = await http

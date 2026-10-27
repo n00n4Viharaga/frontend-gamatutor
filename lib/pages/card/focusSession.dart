@@ -8,7 +8,6 @@ import 'package:gamatutor_kanban/model/cardlist.dart';
 import 'package:gamatutor_kanban/pages/card/editCard.dart';
 import 'package:gamatutor_kanban/pages/dashboard/widgets/user_avatar_profile.dart';
 import 'package:gamatutor_kanban/service/SecureTokenStorage.dart';
-import 'package:gamatutor_kanban/service/avatarService.dart';
 import 'package:gamatutor_kanban/service/avatarService.dart' as AvatarService;
 import 'package:gamatutor_kanban/service/cardService.dart';
 import 'package:url_launcher/url_launcher.dart';

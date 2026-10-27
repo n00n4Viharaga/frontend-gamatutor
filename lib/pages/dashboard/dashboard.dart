@@ -12,11 +12,11 @@ import 'package:gamatutor_kanban/pages/dashboard/goals_screen.dart';
 import 'package:gamatutor_kanban/pages/dashboard/progress_screen.dart';
 import 'package:gamatutor_kanban/pages/dashboard/widgets/user_avatar_profile.dart';
 import 'package:gamatutor_kanban/service/SecureTokenStorage.dart';
-import 'package:gamatutor_kanban/service/avatarService.dart';
 import 'package:gamatutor_kanban/service/avatarService.dart' as AvatarService;
 import 'package:gamatutor_kanban/service/cardService.dart';
 import 'package:gamatutor_kanban/model/card.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:gamatutor_kanban/service/notifService.dart';
 import 'package:gamatutor_kanban/service/rekomendasiService.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 
@@ -221,16 +221,36 @@ class _DashboardState extends State<Dashboard> {
             _cardsList = apiCards;
             _isLoading = false;
           });
+          _checkStalledTasks();
           return;
         }
       } catch (e) {
-        print("🚨 ERROR LOAD DATA: $e");
         debugPrint('Koneksi ke database gagal: $e');
       }
     }
 
     if (mounted) {
       setState(() => _isLoading = false);
+    }
+  }
+
+  void _checkStalledTasks() {
+    final now = DateTime.now();
+
+    // Hitung tugas yang belum selesai (reflectionCompletedAt null) dan dibuat > 7 hari lalu
+    final stalledTasks = _cardsList.where((card) {
+      if (card.reflectionCompletedAt != null) return false;
+      if (card.createdAt == null) return false;
+      return now.difference(card.createdAt!).inDays > 7;
+    }).length;
+
+    if (stalledTasks > 0) {
+      NotificationService.showInstantNotification(
+        id: 2,
+        title: 'Tugas Macet Terdeteksi ⚠️',
+        body:
+            'Kamu punya $stalledTasks tugas yang nganggur lebih dari 7 hari. Yuk, mulai dikit-dikit!',
+      );
     }
   }
 
@@ -327,46 +347,68 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  Widget _buildDynamicTrainingMission() {
-    // Jika belum ada profil kuis, jangan tampilkan apa-apa
-    if (_quizProfile == null || !_quizProfile!.hasQuiz)
-      return const SizedBox.shrink();
+    Widget _buildDynamicTrainingMission() {
+    if (_quizProfile == null || !_quizProfile!.hasQuiz) {
+      return Container(
+        width: double.infinity, // ✅ Paksa selebar layar
+        padding: const EdgeInsets.all(20), // ✅ Samakan padding dengan Hero Card
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24), // ✅ Samakan radius dengan Hero Card
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: const Center(
+          child: Text(
+            'Belum ada profil.',
+            style: TextStyle(fontSize: 14, color: Colors.grey),
+          ),
+        ),
+      );
+    }
 
-    // 1. Ambil Strategi Terkuat (Dominant)
+    final bool isAllRounder =
+        _quizProfile!.userProfile?.toLowerCase().contains('all-rounder') ??
+        false;
+
     final strongestKey = _quizProfile!.dominantStrategy;
     final strongestInfo = _getStrategyInfo(strongestKey);
-
-    // 2. Ambil Strategi Terlemah (Unlocked Features)
-    // Asumsi: unlockedFeatures berisi list kategori yang skornya < 60
     final unlocked = _quizProfile!.unlockedFeatures;
 
-    // Jika tidak ada yang di-unlock (misal semua skornya tinggi), ambil dari 'weakest'
-    // Tapi untuk amannya, kita cek dulu apakah list-nya ada isinya.
-    final weakestKey = unlocked.isNotEmpty ? unlocked.first : null;
-    final weakestInfo = _getStrategyInfo(weakestKey);
-
-    // Jika tidak ada yang perlu diperbaiki, tampilkan pesan sukses
-    if (weakestKey == null) {
+    if (unlocked.isEmpty) {
       return Container(
-        margin: const EdgeInsets.only(top: 16),
-        padding: const EdgeInsets.all(16),
+        width: double.infinity, // ✅ Paksa selebar layar
+        padding: const EdgeInsets.all(20), // ✅ Samakan padding
         decoration: BoxDecoration(
-          color: const Color(0xFFECFDF5),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFF10B981)),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24), // ✅ Samakan radius
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
         ),
-        child: Row(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('🌟', style: TextStyle(fontSize: 24)),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'Kemampuanmu sudah seimbang di semua aspek! Pertahankan performa belajarmu.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF047857),
-                  fontWeight: FontWeight.w600,
-                ),
+            const Text('🌟', style: TextStyle(fontSize: 32)),
+            const SizedBox(height: 12),
+            Text(
+              isAllRounder
+                  ? 'Kamu The All-Rounder! Semua strategimu seimbang dan sangat baik.'
+                  : 'Kemampuanmu sudah seimbang!',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF047857),
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],
@@ -374,37 +416,40 @@ class _DashboardState extends State<Dashboard> {
       );
     }
 
-    // 3. Render Kartu Dinamis
+    final List<Map<String, dynamic>> weakestInfos = unlocked
+        .map((key) => _getStrategyInfo(key))
+        .toList();
+
     return Container(
-      margin: const EdgeInsets.only(top: 16),
-      padding: const EdgeInsets.all(16),
+      width: double.infinity, // ✅ Paksa selebar layar (sama seperti Hero Card)
+      padding: const EdgeInsets.all(20), // ✅ Samakan padding
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(24), // ✅ Samakan radius
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: const Offset(0, 5),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
-            children: [
-              const Icon(
+            children: const [
+              Icon(
                 Icons.track_changes_rounded,
                 color: Color(0xFF8B5CF6),
                 size: 20,
               ),
-              const SizedBox(width: 8),
-              const Text(
-                'Misi Pelatihanmu',
+              SizedBox(width: 8),
+              Text(
+                'Misi Latihan',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 15,
                   fontWeight: FontWeight.w900,
                   color: Color(0xFF0F172A),
                 ),
@@ -412,7 +457,6 @@ class _DashboardState extends State<Dashboard> {
             ],
           ),
           const SizedBox(height: 12),
-          // Teks Dinamis
           RichText(
             text: TextSpan(
               style: const TextStyle(
@@ -421,28 +465,64 @@ class _DashboardState extends State<Dashboard> {
                 height: 1.5,
               ),
               children: [
-                const TextSpan(text: 'Kamu sudah sangat hebat dalam '),
-                TextSpan(
-                  text: '${strongestInfo['name']} ${strongestInfo['emoji']}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF10B981),
-                  ), // Warna Hijau untuk kekuatan
-                ),
-                const TextSpan(
-                  text: '. Namun, grafik Radar Chart-mu menunjukkan bahwa ',
-                ),
-                TextSpan(
-                  text: '${weakestInfo['name']} ${weakestInfo['emoji']}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFEF4444),
-                  ), // Warna Merah untuk kelemahan
-                ),
-                const TextSpan(
-                  text: ' masih perlu ditingkatkan. Yuk, fokus latih itu bulan ini agar belajarmu lebih seimbang!',
-                ),
+                if (isAllRounder)
+                  const TextSpan(
+                    text: 'Kamu sudah sangat hebat di semua bidang! 🌟\nNamun, kamu masih bisa memoles beberapa strategi berikut:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF10B981),
+                    ),
+                  )
+                else ...[
+                  const TextSpan(text: 'Kamu hebat dalam '),
+                  TextSpan(
+                    text: '${strongestInfo['name']} ${strongestInfo['emoji']}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF10B981),
+                    ),
+                  ),
+                  const TextSpan(
+                    text:
+                        '.\n\nTapi, strategi berikut masih perlu ditingkatkan:',
+                  ),
+                ],
               ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: weakestInfos.map((info) {
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFECACA)),
+                ),
+                child: Text(
+                  '${info['name']} ${info['emoji']}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFB91C1C),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Yuk, fokus latih itu bulan ini agar belajarmu lebih seimbang!',
+            style: TextStyle(
+              fontSize: 12,
+              color: Color(0xFF475569),
+              fontStyle: FontStyle.italic,
             ),
           ),
         ],
@@ -543,13 +623,27 @@ class _DashboardState extends State<Dashboard> {
   }
 
   Widget _buildHeroCard() {
-    final hasQuiz = _quizProfile?.hasQuiz ?? false;
+    final bool hasQuiz =
+        (_quizProfile?.userProfile != null &&
+        _quizProfile!.userProfile!.isNotEmpty);
     final progress = _xpTarget > 0 ? _xp / _xpTarget : 0.0;
+    final bool isAllRounder = _quizProfile?.userProfile?.toLowerCase().contains('all-rounder') ?? false;
 
-    final meta = resolveProfileMeta(
-      _quizProfile?.unlockedFeatures.last,
-      dominantStrategy: _quizProfile?.dominantStrategy,
-    );
+    // 3. Pilih Meta yang tepat
+    final ProfileMeta meta;
+    if (isAllRounder) {
+      // ✅ Paksa panggil key 'all_rounder' yang ada di map Anda
+      meta = resolveProfileMeta('all_rounder'); 
+    } else {
+      // Jika bukan all-rounder, pakai logika normal
+      meta = resolveProfileMeta(
+        (_quizProfile?.unlockedFeatures.isNotEmpty ?? false)
+            ? _quizProfile!.unlockedFeatures.last
+            : null,
+        dominantStrategy: _quizProfile?.dominantStrategy,
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -586,7 +680,6 @@ class _DashboardState extends State<Dashboard> {
                           true, // Widget ini otomatis bikin bentuk lingkaran
                     )
                   : Container(
-                      // Ini tampilan sementara (Skeleton/Loading) saat avatar belum selesai di-fetch dari API
                       width: 80,
                       height: 80,
                       decoration: BoxDecoration(
@@ -826,6 +919,7 @@ class _DashboardState extends State<Dashboard> {
       'Latihan 📚',
     ];
     final values = scores.values.toList();
+    debugPrint('🔍 Radar Values: $values');
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -873,7 +967,9 @@ class _DashboardState extends State<Dashboard> {
               ),
               TextButton(
                 onPressed: () {
-                  // TODO: navigasi ke recommendation screen
+                  setState(() {
+                    _selectedIndex = 3;
+                  });
                 },
                 child: const Text(
                   'Detail',
@@ -892,55 +988,63 @@ class _DashboardState extends State<Dashboard> {
             child: RadarChart(
               RadarChartData(
                 dataSets: [
+                  // 1. Data Asli Anda
                   RadarDataSet(
-                    fillColor: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                    borderColor: const Color(0xFF6366F1),
+                    fillColor: const Color(0xFF8B5CF6).withOpacity(0.2),
+                    borderColor: const Color(0xFF8B5CF6),
                     borderWidth: 2,
-                    entryRadius: 3,
+                    entryRadius: 2,
                     dataEntries: values
-                        .map((v) => RadarEntry(value: v))
+                        .map((v) => RadarEntry(value: v ?? 0.0))
                         .toList(),
+                  ),
+                  // 2. ✅ DATA BAYANGAN (Memaksa skala 0-100 agar tidak jadi titik)
+                  RadarDataSet(
+                    fillColor: Colors.transparent,
+                    borderColor: Colors.transparent,
+                    borderWidth: 0,
+                    entryRadius: 0,
+                    dataEntries: const [
+                      RadarEntry(value: 100),
+                      RadarEntry(value: 100),
+                      RadarEntry(value: 100),
+                      RadarEntry(value: 100),
+                      RadarEntry(value: 100),
+                      RadarEntry(value: 100),
+                    ],
                   ),
                 ],
                 radarShape: RadarShape.polygon,
                 radarBackgroundColor: Colors.transparent,
                 borderData: FlBorderData(show: false),
                 radarBorderData: BorderSide(
-                  color: Colors.grey.withValues(alpha: 0.3),
+                  color: Colors.grey.withOpacity(0.2),
                 ),
-                titlePositionPercentageOffset: 0.18,
+                titlePositionPercentageOffset: 0.15,
+                getTitle: (index, angle) {
+                  const shortLabels = [
+                    'Organisasi 🏗️',
+                    'Waktu ⚔️',
+                    'Metakognitif 🪞',
+                    'Bantuan 🤝',
+                    'Elaborasi 🧠',
+                    'Latihan 📚',
+                  ];
+                  return RadarChartTitle(text: shortLabels[index], angle: 0);
+                },
                 titleTextStyle: const TextStyle(
-                  color: Color(0xFF475569),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 8,
+                  color: Colors.grey,
+                  fontWeight: FontWeight.bold,
                 ),
-                getTitle: (index, angle) =>
-                    RadarChartTitle(text: labels[index]),
-                tickCount: 4,
+                tickCount: 2,
                 ticksTextStyle: const TextStyle(color: Colors.transparent),
-                tickBorderData: BorderSide(
-                  color: Colors.grey.withValues(alpha: 0.15),
-                ),
-                gridBorderData: BorderSide(
-                  color: Colors.grey.withValues(alpha: 0.15),
-                ),
+                tickBorderData: BorderSide(color: Colors.grey.withOpacity(0.1)),
+                gridBorderData: BorderSide(color: Colors.grey.withOpacity(0.1)),
               ),
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildPlaceholderView(String title) {
-    return Center(
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: Color(0xFF64748B),
-        ),
       ),
     );
   }
@@ -970,7 +1074,7 @@ class _DashboardState extends State<Dashboard> {
           quizProfile: _quizProfile,
           userXp: _xp,
           currentAvatar: _currentAvatar,
-          onAvatarUpdated: _loadAvatar
+          onAvatarUpdated: _loadAvatar,
         );
         ;
         break;

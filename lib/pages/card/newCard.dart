@@ -7,7 +7,7 @@ import 'package:jwt_decoder/jwt_decoder.dart';
 
 class AddCardView extends StatefulWidget {
   final String token;
-  final Function onCardCreated;
+  final Future<void> Function(Map<String, dynamic>) onCardCreated;
 
   const AddCardView({
     super.key,
@@ -94,7 +94,9 @@ class _AddCardViewState extends State<AddCardView> {
 
       if (_unlockedFeatures.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Anda belum menyelesaikan kuis strategi belajar!')),
+          const SnackBar(
+            content: Text('Anda belum menyelesaikan kuis strategi belajar!'),
+          ),
         );
       }
     } catch (e) {
@@ -112,14 +114,17 @@ class _AddCardViewState extends State<AddCardView> {
     final DateTime tomorrow = DateTime(now.year, now.month, now.day + 1);
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate != null && _selectedDate!.isAfter(tomorrow) ? _selectedDate! : tomorrow,
+      initialDate: _selectedDate != null && _selectedDate!.isAfter(tomorrow)
+          ? _selectedDate!
+          : tomorrow,
       firstDate: tomorrow,
       lastDate: DateTime(2101),
     );
     if (picked != null && picked != _selectedDate) {
       setState(() {
         _selectedDate = picked;
-        _dateController.text = "${picked.day} ${_getMonthName(picked.month)} ${picked.year}";
+        _dateController.text =
+            "${picked.day} ${_getMonthName(picked.month)} ${picked.year}";
       });
     }
   }
@@ -138,7 +143,20 @@ class _AddCardViewState extends State<AddCardView> {
   }
 
   String _getMonthName(int month) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des',
+    ];
     return months[month - 1];
   }
 
@@ -157,10 +175,20 @@ class _AddCardViewState extends State<AddCardView> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Color(0xFF0F172A)),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 15,
+                    color: Color(0xFF0F172A),
+                  ),
                 ),
                 if (subtitle != null)
-                  Text(subtitle, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -203,7 +231,10 @@ class _AddCardViewState extends State<AddCardView> {
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
       ),
     );
   }
@@ -216,13 +247,21 @@ class _AddCardViewState extends State<AddCardView> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Color(0xFF0F172A),
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           'Tugas Baru ✨',
-          style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w900, fontSize: 20),
-        )
+          style: TextStyle(
+            color: Color(0xFF0F172A),
+            fontWeight: FontWeight.w900,
+            fontSize: 20,
+          ),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
@@ -231,37 +270,52 @@ class _AddCardViewState extends State<AddCardView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              
-              // ═══════════════════════════════════════════
-              // 1. INFO DASAR (Bento Box Style)
-              // ═══════════════════════════════════════════
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionHeader('📚', 'Info Tugas', subtitle: 'Apa yang mau kamu pelajari?'),
+                    _buildSectionHeader(
+                      '📚',
+                      'Info Tugas',
+                      subtitle: 'Apa yang mau kamu pelajari?',
+                    ),
                     _buildTextField(
                       controller: _matkulController,
                       hint: 'Mata Kuliah (misal: Algoritma)',
                       icon: Icons.book_rounded,
-                      validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null,
+                      validator: (val) =>
+                          val == null || val.isEmpty ? 'Wajib diisi' : null,
                     ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
-                      children: ['Algoritma', 'Basis Data', 'Kalkulus'].map((matkul) {
+                      children: ['Algoritma', 'Basis Data', 'Kalkulus'].map((
+                        matkul,
+                      ) {
                         return ActionChip(
-                          label: Text(matkul, style: const TextStyle(fontSize: 11)),
+                          label: Text(
+                            matkul,
+                            style: const TextStyle(fontSize: 11),
+                          ),
                           backgroundColor: const Color(0xFFF1F5F9),
                           side: BorderSide.none,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          onPressed: () => setState(() => _matkulController.text = matkul),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          onPressed: () =>
+                              setState(() => _matkulController.text = matkul),
                         );
                       }).toList(),
                     ),
@@ -270,7 +324,8 @@ class _AddCardViewState extends State<AddCardView> {
                       controller: _titleController,
                       hint: 'Nama Tugas (misal: Tugas 1 Sorting)',
                       icon: Icons.task_alt_rounded,
-                      validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null,
+                      validator: (val) =>
+                          val == null || val.isEmpty ? 'Wajib diisi' : null,
                     ),
                     const SizedBox(height: 16),
                     _buildTextField(
@@ -292,12 +347,22 @@ class _AddCardViewState extends State<AddCardView> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionHeader('🧠', 'Strategi Belajar', subtitle: 'Pilih senjata rahasiamu!'),
+                    _buildSectionHeader(
+                      '🧠',
+                      'Strategi Belajar',
+                      subtitle: 'Pilih senjata rahasiamu!',
+                    ),
                     _isLoadingStrategies
                         ? const Center(child: CircularProgressIndicator())
                         : Wrap(
@@ -308,15 +373,20 @@ class _AddCardViewState extends State<AddCardView> {
                               final String keyCode = strategy['keyCode'];
                               final String learningId = strategy['learningId'];
 
-                              bool isUnlocked = _unlockedFeatures.contains(keyCode);
-                              bool isSelected = _selectedStrategyId == learningId;
+                              bool isUnlocked = _unlockedFeatures.contains(
+                                keyCode,
+                              );
+                              bool isSelected =
+                                  _selectedStrategyId == learningId;
 
                               // Emoji berdasarkan strategi
                               String emoji = '🔹';
                               if (keyCode.contains('time')) emoji = '⏱️';
                               if (keyCode.contains('help')) emoji = '🤝';
-                              if (keyCode.contains('organization')) emoji = '🏗️';
-                              if (keyCode.contains('elaboration')) emoji = '🕸️';
+                              if (keyCode.contains('organization'))
+                                emoji = '🏗️';
+                              if (keyCode.contains('elaboration'))
+                                emoji = '🕸️';
                               if (keyCode.contains('rehearsal')) emoji = '🧠';
 
                               return ChoiceChip(
@@ -326,21 +396,35 @@ class _AddCardViewState extends State<AddCardView> {
                                     Text('$emoji $label'),
                                     if (!isUnlocked) ...[
                                       const SizedBox(width: 4),
-                                      const Icon(Icons.lock, size: 14, color: Colors.grey),
+                                      const Icon(
+                                        Icons.lock,
+                                        size: 14,
+                                        color: Colors.grey,
+                                      ),
                                     ],
                                   ],
                                 ),
                                 selected: isSelected,
                                 selectedColor: const Color(0xFFEEF2FF),
-                                backgroundColor: isUnlocked ? Colors.white : Colors.grey[100],
+                                backgroundColor: isUnlocked
+                                    ? Colors.white
+                                    : Colors.grey[100],
                                 labelStyle: TextStyle(
-                                  color: !isUnlocked ? Colors.grey : (isSelected ? const Color(0xFF4F46E5) : Colors.black87),
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  color: !isUnlocked
+                                      ? Colors.grey
+                                      : (isSelected
+                                            ? const Color(0xFF4F46E5)
+                                            : Colors.black87),
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
                                 ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   side: BorderSide(
-                                    color: isSelected ? const Color(0xFF4F46E5) : Colors.grey.shade300,
+                                    color: isSelected
+                                        ? const Color(0xFF4F46E5)
+                                        : Colors.grey.shade300,
                                     width: isSelected ? 2 : 1,
                                   ),
                                 ),
@@ -348,9 +432,13 @@ class _AddCardViewState extends State<AddCardView> {
                                     ? null
                                     : (selected) {
                                         setState(() {
-                                          _selectedStrategyId = selected ? learningId : null;
-                                          _isHelpSeekingSelected = (keyCode == 'help_seeking');
-                                          if (!_isHelpSeekingSelected) _selectedCollaboratorIds.clear();
+                                          _selectedStrategyId = selected
+                                              ? learningId
+                                              : null;
+                                          _isHelpSeekingSelected =
+                                              (keyCode == 'help_seeking');
+                                          if (!_isHelpSeekingSelected)
+                                            _selectedCollaboratorIds.clear();
                                         });
                                       },
                               );
@@ -369,12 +457,22 @@ class _AddCardViewState extends State<AddCardView> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionHeader('🚦', 'Prioritas', subtitle: 'Seberapa penting tugas ini?'),
+                    _buildSectionHeader(
+                      '🚦',
+                      'Prioritas',
+                      subtitle: 'Seberapa penting tugas ini?',
+                    ),
                     Row(
                       children: [
                         _buildPriorityButton('Rendah', 'low', Colors.green),
@@ -383,11 +481,19 @@ class _AddCardViewState extends State<AddCardView> {
                         const SizedBox(width: 8),
                         _buildPriorityButton('Tinggi', 'high', Colors.red),
                         const SizedBox(width: 8),
-                        _buildPriorityButton('Kritis', 'critical', Colors.purple),
+                        _buildPriorityButton(
+                          'Kritis',
+                          'critical',
+                          Colors.purple,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 20),
-                    _buildSectionHeader('🔥', 'Tingkat Kesulitan', subtitle: 'Seberapa menantang?'),
+                    _buildSectionHeader(
+                      '🔥',
+                      'Tingkat Kesulitan',
+                      subtitle: 'Seberapa menantang?',
+                    ),
                     Row(
                       children: [
                         _buildDifficultyButton('Mudah', 'easy'),
@@ -412,12 +518,22 @@ class _AddCardViewState extends State<AddCardView> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionHeader('📅', 'Deadline', subtitle: 'Kapan harus selesai?'),
+                    _buildSectionHeader(
+                      '📅',
+                      'Deadline',
+                      subtitle: 'Kapan harus selesai?',
+                    ),
                     Row(
                       children: [
                         Expanded(
@@ -456,12 +572,22 @@ class _AddCardViewState extends State<AddCardView> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionHeader('🪜', 'Langkah Kecil', subtitle: 'Pecah tugas besar jadi kecil'),
+                    _buildSectionHeader(
+                      '🪜',
+                      'Langkah Kecil',
+                      subtitle: 'Pecah tugas besar jadi kecil',
+                    ),
                     ..._subTaskControllers.asMap().entries.map((entry) {
                       int index = entry.key;
                       return Padding(
@@ -476,8 +602,13 @@ class _AddCardViewState extends State<AddCardView> {
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
-                              onPressed: () => setState(() => _subTaskControllers.removeAt(index)),
+                              icon: const Icon(
+                                Icons.remove_circle_outline,
+                                color: Colors.redAccent,
+                              ),
+                              onPressed: () => setState(
+                                () => _subTaskControllers.removeAt(index),
+                              ),
                             ),
                           ],
                         ),
@@ -485,11 +616,24 @@ class _AddCardViewState extends State<AddCardView> {
                     }),
                     TextButton.icon(
                       onPressed: _addSubTaskField,
-                      icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF4F46E5)),
-                      label: const Text('Tambah Langkah', style: TextStyle(color: Color(0xFF4F46E5), fontWeight: FontWeight.bold)),
+                      icon: const Icon(
+                        Icons.add_circle_outline_rounded,
+                        color: Color(0xFF4F46E5),
+                      ),
+                      label: const Text(
+                        'Tambah Langkah',
+                        style: TextStyle(
+                          color: Color(0xFF4F46E5),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     const Divider(height: 32),
-                    _buildSectionHeader('🔗', 'Link Referensi', subtitle: 'Sumber belajar (opsional)'),
+                    _buildSectionHeader(
+                      '🔗',
+                      'Link Referensi',
+                      subtitle: 'Sumber belajar (opsional)',
+                    ),
                     ..._urlController.asMap().entries.map((entry) {
                       int index = entry.key;
                       return Padding(
@@ -504,8 +648,13 @@ class _AddCardViewState extends State<AddCardView> {
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
-                              onPressed: () => setState(() => _urlController.removeAt(index)),
+                              icon: const Icon(
+                                Icons.remove_circle_outline,
+                                color: Colors.redAccent,
+                              ),
+                              onPressed: () => setState(
+                                () => _urlController.removeAt(index),
+                              ),
                             ),
                           ],
                         ),
@@ -513,8 +662,17 @@ class _AddCardViewState extends State<AddCardView> {
                     }),
                     TextButton.icon(
                       onPressed: _addURLField,
-                      icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF4F46E5)),
-                      label: const Text('Tambah Link', style: TextStyle(color: Color(0xFF4F46E5), fontWeight: FontWeight.bold)),
+                      icon: const Icon(
+                        Icons.add_circle_outline_rounded,
+                        color: Color(0xFF4F46E5),
+                      ),
+                      label: const Text(
+                        'Tambah Link',
+                        style: TextStyle(
+                          color: Color(0xFF4F46E5),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -535,7 +693,11 @@ class _AddCardViewState extends State<AddCardView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildSectionHeader('🤝', 'Ajak Teman Kolaborasi', subtitle: 'Belajar bareng lebih seru!'),
+                      _buildSectionHeader(
+                        '🤝',
+                        'Ajak Teman Kolaborasi',
+                        subtitle: 'Belajar bareng lebih seru!',
+                      ),
                       TextField(
                         decoration: InputDecoration(
                           hintText: 'Cari username teman...',
@@ -543,8 +705,13 @@ class _AddCardViewState extends State<AddCardView> {
                           prefixIcon: const Icon(Icons.search, size: 20),
                           filled: true,
                           fillColor: Colors.white,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -562,32 +729,60 @@ class _AddCardViewState extends State<AddCardView> {
                           itemCount: _availableFriends.length,
                           itemBuilder: (context, index) {
                             final friend = _availableFriends[index];
-                            final isSelected = _selectedCollaboratorIds.contains(friend['userId']);
+                            final isSelected = _selectedCollaboratorIds
+                                .contains(friend['userId']);
                             return Card(
                               elevation: 0,
                               color: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                               child: ListTile(
-                                leading: CircleAvatar(backgroundColor: const Color(0xFFE0E7FF), child: Text(friend['name'][0])),
-                                title: Text(friend['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                subtitle: Text('Strategi: ${friend['strategy']}', style: const TextStyle(fontSize: 11)),
+                                leading: CircleAvatar(
+                                  backgroundColor: const Color(0xFFE0E7FF),
+                                  child: Text(friend['name'][0]),
+                                ),
+                                title: Text(
+                                  friend['name'],
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'Strategi: ${friend['strategy']}',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
                                 trailing: ElevatedButton(
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: isSelected ? Colors.red.shade50 : const Color(0xFF4F46E5),
-                                    foregroundColor: isSelected ? Colors.red : Colors.white,
+                                    backgroundColor: isSelected
+                                        ? Colors.red.shade50
+                                        : const Color(0xFF4F46E5),
+                                    foregroundColor: isSelected
+                                        ? Colors.red
+                                        : Colors.white,
                                     elevation: 0,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
                                   ),
                                   onPressed: () {
                                     setState(() {
                                       if (isSelected) {
-                                        _selectedCollaboratorIds.remove(friend['userId']);
+                                        _selectedCollaboratorIds.remove(
+                                          friend['userId'],
+                                        );
                                       } else {
-                                        _selectedCollaboratorIds.add(friend['userId']);
+                                        _selectedCollaboratorIds.add(
+                                          friend['userId'],
+                                        );
                                       }
                                     });
                                   },
-                                  child: Text(isSelected ? 'Batal' : 'Pilih', style: const TextStyle(fontSize: 11)),
+                                  child: Text(
+                                    isSelected ? 'Batal' : 'Pilih',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
                                 ),
                               ),
                             );
@@ -597,7 +792,7 @@ class _AddCardViewState extends State<AddCardView> {
                   ),
                 ),
               ],
-              
+
               const SizedBox(height: 32),
 
               // ═══════════════════════════════════════════
@@ -609,13 +804,19 @@ class _AddCardViewState extends State<AddCardView> {
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF6366F1),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     elevation: 0,
                   ),
                   onPressed: _submitForm,
                   child: const Text(
                     'Buat Tugas Sekarang 🚀',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
               ),
@@ -639,7 +840,10 @@ class _AddCardViewState extends State<AddCardView> {
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
             color: isSelected ? color.withOpacity(0.15) : Colors.white,
-            border: Border.all(color: isSelected ? color : Colors.grey.shade300, width: isSelected ? 2 : 1),
+            border: Border.all(
+              color: isSelected ? color : Colors.grey.shade300,
+              width: isSelected ? 2 : 1,
+            ),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Center(
@@ -660,8 +864,14 @@ class _AddCardViewState extends State<AddCardView> {
   // ─── HELPER TOMBOL KESULITAN (Warna-warni) ───
   Widget _buildDifficultyButton(String label, String value) {
     bool isSelected = _selectedDifficulty == value;
-    Color color = value == 'easy' ? Colors.green : value == 'medium' ? Colors.orange : value == 'hard' ? Colors.red : Colors.purple;
-    
+    Color color = value == 'easy'
+        ? Colors.green
+        : value == 'medium'
+        ? Colors.orange
+        : value == 'hard'
+        ? Colors.red
+        : Colors.purple;
+
     return Expanded(
       child: GestureDetector(
         onTap: () {
@@ -672,7 +882,10 @@ class _AddCardViewState extends State<AddCardView> {
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
             color: isSelected ? color.withOpacity(0.15) : Colors.white,
-            border: Border.all(color: isSelected ? color : Colors.grey.shade300, width: isSelected ? 2 : 1),
+            border: Border.all(
+              color: isSelected ? color : Colors.grey.shade300,
+              width: isSelected ? 2 : 1,
+            ),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Center(
@@ -694,55 +907,93 @@ class _AddCardViewState extends State<AddCardView> {
     if (_formKey.currentState!.validate()) {
       if (_selectedStrategyId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Pilih strategi belajar terlebih dahulu!')),
+          const SnackBar(
+            content: Text('Pilih strategi belajar terlebih dahulu!'),
+          ),
         );
         return;
       }
 
-      final String? fetchedLearningId = await CardService.fetchLearningIdByName(_selectedStrategyId!);
+      final String? fetchedLearningId = await CardService.fetchLearningIdByName(
+        _selectedStrategyId!,
+      );
       if (fetchedLearningId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gagal mengambil ID strategi dari server!')),
+          const SnackBar(
+            content: Text('Gagal mengambil ID strategi dari server!'),
+          ),
         );
         return;
       }
 
-      // Pengecekan tanggal (dari kode asli Anda, sesuaikan jika perlu)
-      if (_selectedDate != null && _selectedDeadline != null && _selectedDeadline!.isAfter(DateTime.now())) {
-        _selectedDeadline = DateTime(
+      // ★ PERBAIKAN 1: Logika penentuan Deadline yang pasti terisi
+      DateTime finalDeadline;
+      if (_selectedDate != null) {
+        // Jika user memilih tanggal, gabungkan dengan jam
+        finalDeadline = DateTime(
           _selectedDate!.year,
           _selectedDate!.month,
           _selectedDate!.day,
           _selectedTime?.hour ?? 23,
           _selectedTime?.minute ?? 59,
         );
-      } else if (_selectedDate == null) {
-         // Jika user tidak memilih tanggal, set default besok
-         final tomorrow = DateTime.now().add(const Duration(days: 1));
-         _selectedDeadline = DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 23, 59);
+      } else {
+        // Jika user lupa/tidak memilih, set default besok jam 23:59
+        final tomorrow = DateTime.now().add(const Duration(days: 1));
+        finalDeadline = DateTime(
+          tomorrow.year,
+          tomorrow.month,
+          tomorrow.day,
+          23,
+          59,
+        );
       }
 
-      List<String> urlList = _urlController.map((c) => c.text.trim()).where((u) => u.isNotEmpty).toList();
+      List<String> urlList = _urlController
+          .map((c) => c.text.trim())
+          .where((u) => u.isNotEmpty)
+          .toList();
       String combinedUrls = urlList.join(', ');
 
-      List<String> subtaksList = _subTaskControllers.map((c) => c.text.trim()).where((t) => t.isNotEmpty).toList();
+      List<String> subtaksList = _subTaskControllers
+          .map((c) => c.text.trim())
+          .where((t) => t.isNotEmpty)
+          .toList();
 
+      // ★ PERBAIKAN 2: Nama key disesuaikan dengan Sequelize (camelCase)
       final payload = {
-        'nmMatkul': _matkulController.text,
+        'courseName': _matkulController.text
+            .trim(), // Sequelize biasanya pakai camelCase
         'title': _titleController.text,
         'description': _descController.text,
-        'learningId': fetchedLearningId,
+        'learningId':
+            fetchedLearningId, // ★ Gunakan learningId (bukan learningStrat)
         'priority': _selectedPriority,
         'difficulty': _selectedDifficulty,
-        'deadline': _selectedDeadline?.toIso8601String(),
-        'startTime': DateTime.now().toIso8601String(),
+        'deadline': finalDeadline.toIso8601String(), // ★ Pasti terisi
+        'startTime': null,
         'subtasks': subtaksList,
-        'URL': combinedUrls,
+        'url': combinedUrls,
         'collaborators': _selectedCollaboratorIds,
       };
 
-      widget.onCardCreated(payload);
-      Navigator.pop(context);
+      print("PAYLOAD FINAL KARTU: $payload");
+
+      try {
+        // ✅ TUNGGU save selesai dulu
+        await widget.onCardCreated(payload);
+
+        if (!mounted) return;
+        Navigator.pop(context, true); // ✅ POP HANYA DI SINI
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal menyimpan: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }

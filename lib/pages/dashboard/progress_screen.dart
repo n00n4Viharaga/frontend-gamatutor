@@ -44,7 +44,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
     // ─── 2. DETEKSI TUGAS MACET (> 7 Hari) ───
     final stalledCards = cards.where((c) {
       final col = c.computedColumn.toLowerCase();
-      if (col == 'reflection') return false; // Sudah selesai
+      if (col == 'reflection') return false;
       if (c.createdAt == null) return false;
       final diff = DateTime.now().difference(c.createdAt!).inDays;
       return diff > 7;
@@ -69,360 +69,402 @@ class _ProgressScreenState extends State<ProgressScreen> {
       backgroundColor: const Color(0xFFF8FAFC),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Your Stats ✨',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 20),
+        // ✅ 1. BUNGKUS DENGAN LAYOUTBUILDER UNTUK RESPONSIVE
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Jika lebar > 600 (Tablet), maka isTablet = true
+            final bool isTablet = constraints.maxWidth > 600;
 
-            // ★ 1. PERINGATAN TUGAS MACET (Jika Ada)
-            if (stalledCards.isNotEmpty) ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEF2F2), // Merah soft
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFFECACA)),
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Your Stats ✨',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF0F172A),
+                  ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                const SizedBox(height: 20),
+
+                // ★ PERINGATAN TUGAS MACET (Jika Ada)
+                if (stalledCards.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFFECACA)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
-                          Icons.warning_amber_rounded,
-                          color: Color(0xFFEF4444),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              color: Color(0xFFEF4444),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${stalledCards.length} Tugas Macet',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: Color(0xFF991B1B),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${stalledCards.length} Tugas Macet',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: Color(0xFF991B1B),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Tugas ini udah nganggur > 7 hari. Yuk, mulai dikit-dikit!',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFFB91C1C),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Tugas ini udah nganggur > 7 hari. Yuk, mulai dikit-dikit!',
-                      style: TextStyle(fontSize: 12, color: Color(0xFFB91C1C)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            // ★ 2. HERO CARD
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF8B5CF6).withOpacity(0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
                   ),
                 ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+
+                // ★ HERO CARD (Completion Rate)
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Completion Rate',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Completion Rate',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${completionRate.toInt()}%',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 40,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '$completedCards dari $totalCards Tugas',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${completionRate.toInt()}%',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 40,
-                          fontWeight: FontWeight.w900,
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '$completedCards dari $totalCards Tugas',
-                        style: const TextStyle(
+                        child: const Icon(
+                          Icons.emoji_events_rounded,
                           color: Colors.white,
-                          fontSize: 12,
+                          size: 40,
                         ),
                       ),
                     ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.emoji_events_rounded,
-                      color: Colors.white,
-                      size: 40,
+                ),
+                const SizedBox(height: 24),
+
+                // ✅ 2. LOGIKA RESPONSIVE UNTUK WEEKLY RECAP & MISI
+                if (isTablet) ...[
+                  // --- TAMPILAN TABLET: Berdampingan (Kiri & Kanan) ---
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: _buildWeeklyRecap(cards)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildDynamicTrainingMission()),
+                      ],
                     ),
                   ),
+                  const SizedBox(height: 24),
+                ] else ...[
+                  // --- TAMPILAN HP: Weekly Recap Full Width di bawah Completion Rate ---
+                  _buildWeeklyRecap(cards),
+                  const SizedBox(height: 24),
                 ],
-              ),
-            ),
-            const SizedBox(height: 24),
 
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment:
-                    CrossAxisAlignment.stretch, // ★ Kunci agar tinggi sama
-                children: [
-                  // KIRI: Weekly Recap
-                  Expanded(child: _buildWeeklyRecap(cards)),
-                  const SizedBox(width: 12),
-                  // KANAN: Misi Pelatihan
-                  Expanded(child: _buildDynamicTrainingMission()),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // ★ 3. BENTO GRID: FOKUS & PROFIL KEMAMPUAN
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // KIRI: FOKUS (Donut)
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Colors.white, Colors.white],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color.fromARGB(
-                              255,
-                              248,
-                              248,
-                              248,
-                            ).withOpacity(0.3),
-                            blurRadius: 10,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Fokus Kamu 🎯',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              SizedBox(
-                                height: 120,
-                                child: PieChart(
-                                  PieChartData(
-                                    sectionsSpace: 3,
-                                    centerSpaceRadius: 35,
-                                    sections: [
-                                      PieChartSectionData(
-                                        color: const Color(0xFF10B981),
-                                        value: reflectionCount.toDouble(),
-                                        radius: 15,
-                                        showTitle: false,
-                                      ),
-                                      PieChartSectionData(
-                                        color: const Color(0xFF3B82F6),
-                                        value: controllingCount.toDouble(),
-                                        radius: 15,
-                                        showTitle: false,
-                                      ),
-                                      PieChartSectionData(
-                                        color: const Color(0xFFF59E0B),
-                                        value: monitoringCount.toDouble(),
-                                        radius: 15,
-                                        showTitle: false,
-                                      ),
-                                      PieChartSectionData(
-                                        color: const Color(0xFFEF4444),
-                                        value: planningCount.toDouble(),
-                                        radius: 15,
-                                        showTitle: false,
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                // ★ BENTO GRID: FOKUS & PROFIL KEMAMPUAN (Tetap Berdampingan)
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // KIRI: FOKUS (Donut)
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Colors.white, Colors.white],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color.fromARGB(
+                                  255,
+                                  248,
+                                  248,
+                                  248,
+                                ).withOpacity(0.3),
+                                blurRadius: 10,
+                                offset: const Offset(0, 5),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          Column(
-                            children: [
-                              _buildLegend(
-                                'Selesai',
-                                const Color(0xFF10B981),
-                                reflectionCount,
-                              ),
-                              _buildLegend(
-                                'Cek',
-                                const Color(0xFF3B82F6),
-                                controllingCount,
-                              ),
-                              _buildLegend(
-                                'Proses',
-                                const Color(0xFFF59E0B),
-                                monitoringCount,
-                              ),
-                              _buildLegend(
-                                'Rencana',
-                                const Color(0xFFEF4444),
-                                planningCount,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  // KANAN: PROFIL (Radar)
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Colors.white, Colors.white],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color.fromARGB(
-                              255,
-                              248,
-                              248,
-                              248,
-                            ).withOpacity(0.3),
-                            blurRadius: 10,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
+                          child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text(
-                                'Profil Kemampuan 🧠',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              SizedBox(
-                                height: 220,
-                                child: RadarChart(
-                                  RadarChartData(
-                                    dataSets: [
-                                      RadarDataSet(
-                                        fillColor: const Color(0xFF8B5CF6)
-                                            .withOpacity(0.2),
-                                        borderColor: const Color(0xFF8B5CF6),
-                                        borderWidth: 2,
-                                        entryRadius: 2,
-                                        dataEntries: values
-                                            .map(
-                                              (v) =>
-                                                  RadarEntry(value: v ?? 0.0),
-                                            )
-                                            .toList(),
-                                      ),
-                                    ],
-                                    radarShape: RadarShape.polygon,
-                                    radarBackgroundColor: Colors.transparent,
-                                    borderData: FlBorderData(show: false),
-                                    radarBorderData: BorderSide(
-                                      color: Colors.grey.withOpacity(0.2),
-                                    ),
-                                    titlePositionPercentageOffset: 0.15,
-                                    getTitle: (index, angle) {
-                                      const shortLabels = [
-                                        'Organisasi 🏗️',
-                                        'Waktu ⚔️',
-                                        'Metakognitif 🪞',
-                                        'Bantuan 🤝',
-                                        'Elaborasi 🧠',
-                                        'Latihan 📚',
-                                      ];
-                                      return RadarChartTitle(
-                                        text: shortLabels[index],
-                                        angle: 0,
-                                      );
-                                    },
-                                    titleTextStyle: const TextStyle(
-                                      fontSize: 8,
-                                      color: Colors.grey,
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Fokus Kamu 🎯',
+                                    style: TextStyle(
+                                      fontSize: 13,
                                       fontWeight: FontWeight.bold,
                                     ),
-                                    tickCount: 2,
-                                    ticksTextStyle: const TextStyle(
-                                      color: Colors.transparent,
-                                    ),
-                                    tickBorderData: BorderSide(
-                                      color: Colors.grey.withOpacity(0.1),
-                                    ),
-                                    gridBorderData: BorderSide(
-                                      color: Colors.grey.withOpacity(0.1),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  SizedBox(
+                                    height: 120,
+                                    child: PieChart(
+                                      PieChartData(
+                                        sectionsSpace: 3,
+                                        centerSpaceRadius: 35,
+                                        sections: [
+                                          PieChartSectionData(
+                                            color: const Color(0xFF10B981),
+                                            value: reflectionCount.toDouble(),
+                                            radius: 15,
+                                            showTitle: false,
+                                          ),
+                                          PieChartSectionData(
+                                            color: const Color(0xFF3B82F6),
+                                            value: controllingCount.toDouble(),
+                                            radius: 15,
+                                            showTitle: false,
+                                          ),
+                                          PieChartSectionData(
+                                            color: const Color(0xFFF59E0B),
+                                            value: monitoringCount.toDouble(),
+                                            radius: 15,
+                                            showTitle: false,
+                                          ),
+                                          PieChartSectionData(
+                                            color: const Color(0xFFEF4444),
+                                            value: planningCount.toDouble(),
+                                            radius: 15,
+                                            showTitle: false,
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Column(
+                                children: [
+                                  _buildLegend(
+                                    'Selesai',
+                                    const Color(0xFF10B981),
+                                    reflectionCount,
+                                  ),
+                                  _buildLegend(
+                                    'Cek',
+                                    const Color(0xFF3B82F6),
+                                    controllingCount,
+                                  ),
+                                  _buildLegend(
+                                    'Proses',
+                                    const Color(0xFFF59E0B),
+                                    monitoringCount,
+                                  ),
+                                  _buildLegend(
+                                    'Rencana',
+                                    const Color(0xFFEF4444),
+                                    planningCount,
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 16),
+                      // KANAN: PROFIL (Radar)
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Colors.white, Colors.white],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color.fromARGB(
+                                  255,
+                                  248,
+                                  248,
+                                  248,
+                                ).withOpacity(0.3),
+                                blurRadius: 10,
+                                offset: const Offset(0, 5),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Profil Kemampuan 🧠',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  SizedBox(
+                                    height: 220,
+                                    child: RadarChart(
+                                      RadarChartData(
+                                        dataSets: [
+                                          // 1. Data Asli Anda
+                                          RadarDataSet(
+                                            fillColor: const Color(0xFF8B5CF6)
+                                                .withOpacity(0.2),
+                                            borderColor: const Color(
+                                              0xFF8B5CF6,
+                                            ),
+                                            borderWidth: 2,
+                                            entryRadius: 2,
+                                            dataEntries: values
+                                                .map(
+                                                  (v) => RadarEntry(
+                                                    value: v ?? 0.0,
+                                                  ),
+                                                )
+                                                .toList(),
+                                          ),
+                                          // 2. ✅ DATA BAYANGAN (Memaksa skala 0-100 agar tidak jadi titik)
+                                          RadarDataSet(
+                                            fillColor: Colors.transparent,
+                                            borderColor: Colors.transparent,
+                                            borderWidth: 0,
+                                            entryRadius: 0,
+                                            dataEntries: const [
+                                              RadarEntry(value: 100),
+                                              RadarEntry(value: 100),
+                                              RadarEntry(value: 100),
+                                              RadarEntry(value: 100),
+                                              RadarEntry(value: 100),
+                                              RadarEntry(value: 100),
+                                            ],
+                                          ),
+                                        ],
+                                        radarShape: RadarShape.polygon,
+                                        radarBackgroundColor:
+                                            Colors.transparent,
+                                        borderData: FlBorderData(show: false),
+                                        radarBorderData: BorderSide(
+                                          color: Colors.grey.withOpacity(0.2),
+                                        ),
+                                        titlePositionPercentageOffset: 0.15,
+                                        getTitle: (index, angle) {
+                                          const shortLabels = [
+                                            'Organisasi 🏗️',
+                                            'Waktu ⚔️',
+                                            'Metakognitif 🪞',
+                                            'Bantuan 🤝',
+                                            'Elaborasi 🧠',
+                                            'Latihan 📚',
+                                          ];
+                                          return RadarChartTitle(
+                                            text: shortLabels[index],
+                                            angle: 0,
+                                          );
+                                        },
+                                        titleTextStyle: const TextStyle(
+                                          fontSize: 8,
+                                          color: Colors.grey,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        tickCount: 2,
+                                        ticksTextStyle: const TextStyle(
+                                          color: Colors.transparent,
+                                        ),
+                                        tickBorderData: BorderSide(
+                                          color: Colors.grey.withOpacity(0.1),
+                                        ),
+                                        gridBorderData: BorderSide(
+                                          color: Colors.grey.withOpacity(0.1),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
+                ),
+
+                // ✅ 3. FOOTER (Misi Latihan di bawah khusus HP)
+                if (!isTablet) ...[
+                  const SizedBox(height: 24),
+                  _buildDynamicTrainingMission(),
                 ],
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
@@ -474,154 +516,119 @@ class _ProgressScreenState extends State<ProgressScreen> {
   }
 
   Widget _buildDynamicTrainingMission() {
-    if (widget.quizProfile == null || !widget.quizProfile!.hasQuiz) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Colors.white, Colors.white],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: const Color.fromARGB(255, 248, 248, 248).withOpacity(0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: const Center(
-          child: Text(
-            'Belum ada profil.',
-            style: TextStyle(fontSize: 20, color: Colors.grey),
-          ),
-        ),
-      );
-    }
-
-    final strongestKey = widget.quizProfile!.dominantStrategy;
-    final strongestInfo = _getStrategyInfo(strongestKey);
-
-    final unlocked = widget.quizProfile!.unlockedFeatures;
-    final weakestKey = unlocked.isNotEmpty ? unlocked.first : null;
-
-    // Jika tidak ada yang perlu diperbaiki
-    if (weakestKey == null) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Colors.white, Colors.white],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: const Color.fromARGB(255, 248, 248, 248).withOpacity(0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: const Column(
-          mainAxisAlignment:
-              MainAxisAlignment.center, // ★ Center agar pas di tengah
-          children: [
-            Text('🌟', style: TextStyle(fontSize: 24)),
-            SizedBox(height: 8),
-            Text(
-              'Kemampuanmu sudah seimbang!',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 20,
-                color: Color(0xFF047857),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final weakestInfo = _getStrategyInfo(weakestKey);
-
+  if (widget.quizProfile == null || !widget.quizProfile!.hasQuiz) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Colors.white, Colors.white],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: const Color.fromARGB(255, 248, 248, 248).withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))],
+      ),
+      child: const Center(child: Text('Belum ada profil.', style: TextStyle(fontSize: 14, color: Colors.grey))),
+    );
+  }
+
+  // ✅ Cek apakah dia The All-Rounder
+  final bool isAllRounder = widget.quizProfile!.userProfile?.toLowerCase().contains('all-rounder') ?? false;
+  
+  final strongestKey = widget.quizProfile!.dominantStrategy;
+  final strongestInfo = _getStrategyInfo(strongestKey);
+  final unlocked = widget.quizProfile!.unlockedFeatures;
+
+  // Jika semua kemampuan sudah seimbang (tidak ada yang di-unlock)
+  if (unlocked.isEmpty) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment:
-            MainAxisAlignment.spaceBetween, // ★ Agar merenggang atas-bawah
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
-            children: const [
-              Icon(
-                Icons.track_changes_rounded,
-                color: Color(0xFF8B5CF6),
-                size: 16,
-              ),
-              SizedBox(width: 6),
-              Text(
-                'Misi Latihan',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF0F172A),
-                ),
-              ),
-            ],
+          const Text('🌟', style: TextStyle(fontSize: 32)),
+          const SizedBox(height: 12),
+          Text(
+            isAllRounder 
+              ? 'Kamu The All-Rounder! Semua strategimu seimbang dan sangat baik.' 
+              : 'Kemampuanmu sudah seimbang!',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF047857), fontWeight: FontWeight.bold),
           ),
-
-          RichText(
-            text: TextSpan(
-              style: const TextStyle(
-                fontSize: 15,
-                color: Color(0xFF475569),
-                height: 1.4,
-              ),
-              children: [
-                const TextSpan(text: 'Kamu hebat dalam '),
-                TextSpan(
-                  text: '${strongestInfo['name']} ${strongestInfo['emoji']}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF10B981),
-                  ),
-                ),
-                const TextSpan(text: '. Tapi, '),
-                TextSpan(
-                  text: '${weakestInfo['name']} ${weakestInfo['emoji']}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFEF4444),
-                  ),
-                ),
-                const TextSpan(text: ' perlu ditingkatkan. Yuk, latih itu!'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12), // Spasi pengaman di bawah
         ],
       ),
     );
   }
+
+  // ... (Sisa kode untuk menampilkan Chips misi latihan tetap sama seperti sebelumnya)
+  final List<Map<String, dynamic>> weakestInfos = unlocked.map((key) => _getStrategyInfo(key)).toList();
+
+  return Container(
+    // ... (Kode Container Misi Latihan Anda)
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: const [
+            Icon(Icons.track_changes_rounded, color: Color(0xFF8B5CF6), size: 20),
+            SizedBox(width: 8),
+            Text('Misi Latihan', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
+          ],
+        ),
+        const SizedBox(height: 12),
+        RichText(
+          text: TextSpan(
+            style: const TextStyle(fontSize: 12, color: Color(0xFF475569), height: 1.5),
+            children: [
+              // ✅ Ubah teks jika dia All-Rounder
+              if (isAllRounder)
+                const TextSpan(
+                  text: 'Kamu sudah sangat hebat di semua bidang! 🌟\nNamun, kamu masih bisa memoles beberapa strategi berikut:',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                )
+              else ...[
+                const TextSpan(text: 'Kamu hebat dalam '),
+                TextSpan(
+                  text: '${strongestInfo['name']} ${strongestInfo['emoji']}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                ),
+                const TextSpan(text: '.\n\nTapi, strategi berikut masih perlu ditingkatkan:'),
+              ]
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        
+        // Chips Misi
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: weakestInfos.map((info) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: Text(
+                '${info['name']} ${info['emoji']}',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFB91C1C)),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Yuk, fokus latih itu bulan ini agar belajarmu lebih seimbang!',
+          style: TextStyle(fontSize: 12, color: Color(0xFF475569), fontStyle: FontStyle.italic),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildWeeklyRecap(List<Card> cards) {
     final now = DateTime.now();
@@ -712,24 +719,30 @@ class _ProgressScreenState extends State<ProgressScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment:
-            MainAxisAlignment.spaceBetween, // ★ Agar konten merata atas-bawah
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
-                children: [
-                  Text('📅', style: TextStyle(fontSize: 18)),
-                  SizedBox(width: 8),
-                  Text(
-                    'Weekly Recap',
-                    style: TextStyle(
-                      color: Color.fromARGB(255, 0, 0, 0),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
+              Expanded(
+                child: Row(
+                  children: [
+                    const Text('📅', style: TextStyle(fontSize: 18)),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: const Text(
+                        'Weekly Recap',
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 0, 0, 0),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -737,13 +750,15 @@ class _ProgressScreenState extends State<ProgressScreen> {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.black.withOpacity(
+                    0.1,
+                  ), // (Opsional) Ubah warna agar kontras
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Text(
                   'Minggu Ini',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: Color.fromARGB(255, 0, 0, 0),
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                   ),

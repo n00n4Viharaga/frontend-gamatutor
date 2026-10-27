@@ -14,17 +14,25 @@ class CardService {
   //Mengambil LearningId
   static Future<String?> fetchLearningIdByName(String strategyName) async {
     try {
+      final token =
+          await SecureTokenStorage.getToken(); // Jika endpoint butuh token auth
+
       final formattedName = strategyName.toLowerCase();
       final baseUrl = await ApiConstants.getBaseUrl('');
 
       // Menggunakan baseUrl dari ApiConstants
       final response = await http.get(
         Uri.parse('$baseUrl/learning-strats/$formattedName'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['learning_strats']['learningId'];
+        print("RAW JSON DARI BACKEND: $data");
+        return data['learningStrat']?['learningId'];
       }
       return null;
     } catch (e) {
@@ -70,6 +78,14 @@ class CardService {
     String learningId,
   ) async {
     try {
+      final token = await SecureTokenStorage.getToken();
+
+      print("🔑 [FLUTTER] Token yang dikirim: $token");
+
+      if (token == null) {
+        print("❌ [FLUTTER] Token NULL! User harus login ulang.");
+      }
+
       final baseUrl = await ApiConstants.getBaseUrl('');
       final response = await http.get(
         Uri.parse('$baseUrl/learning-strats/$learningId'),
@@ -102,6 +118,7 @@ class CardService {
 
   Future<List<model.Card>> getCardsByUser(String token) async {
     try {
+      final token = await SecureTokenStorage.getToken();
       final baseUrl = await ApiConstants.getBaseUrl('');
       final response = await http.get(
         Uri.parse('$baseUrl/cards'),
@@ -137,6 +154,7 @@ class CardService {
   // Mengambil CardList berdasarkan cardId
   Future<CardList?> getCardList(String token, String cardId) async {
     try {
+      final token = await SecureTokenStorage.getToken();
       final baseUrl = await ApiConstants.getBaseUrl('');
       final response = await http.get(
         Uri.parse('$baseUrl/cards/$cardId/list'),
@@ -161,6 +179,7 @@ class CardService {
     String cardId,
   ) async {
     try {
+      final token = await SecureTokenStorage.getToken();
       final baseUrl = await ApiConstants.getBaseUrl('');
       final response = await http.get(
         Uri.parse('$baseUrl/column-movements/card/$cardId'),
@@ -185,6 +204,7 @@ class CardService {
     String token,
     Map<String, dynamic> cardData,
   ) async {
+    final token = await SecureTokenStorage.getToken();
     final baseUrl = await ApiConstants.getBaseUrl('');
     final response = await http.post(
       Uri.parse('$baseUrl/cards'),
@@ -195,9 +215,11 @@ class CardService {
       body: jsonEncode(cardData),
     );
 
+    print("STATUS: ${response.statusCode}");
+    print("PESAN ERROR BACKEND: ${response.body}");
+
     if (response.statusCode == 201 || response.statusCode == 200) {
       final jsonResponse = jsonDecode(response.body);
-      // Mengakomodasi format response { data: ... }, { card: ... }, atau langsung object
       return jsonResponse['data'] ?? jsonResponse['card'] ?? jsonResponse;
     } else {
       throw Exception('Gagal membuat card: ${response.body}');
@@ -210,6 +232,7 @@ class CardService {
     String cardId,
     Map<String, dynamic> subTaskData,
   ) async {
+    final token = await SecureTokenStorage.getToken();
     final baseUrl = await ApiConstants.getBaseUrl('');
     final response = await http.post(
       Uri.parse('$baseUrl/cards/$cardId/list'),
@@ -232,6 +255,7 @@ class CardService {
     Map<String, dynamic> updateData,
   ) async {
     try {
+      final token = await SecureTokenStorage.getToken();
       final baseUrl = await ApiConstants.getBaseUrl('');
       final response = await http.put(
         Uri.parse('$baseUrl/cards/$cardId'),
@@ -241,9 +265,6 @@ class CardService {
         },
         body: jsonEncode(updateData), // Pastikan di-encode ke JSON string
       );
-
-      print("UPDATE CARD STATUS: ${response.statusCode}");
-      print("UPDATE CARD BODY: ${response.body}");
 
       return response.statusCode == 200;
     } catch (e) {
@@ -258,6 +279,7 @@ class CardService {
     String clId,
     Map<String, dynamic> subTaskData,
   ) async {
+    final token = await SecureTokenStorage.getToken();
     final baseUrl = await ApiConstants.getBaseUrl('');
     final response = await http.put(
       Uri.parse('$baseUrl/cards/$cardId/list/$clId'),
@@ -273,8 +295,22 @@ class CardService {
     }
   }
 
+  Future<bool> deleteCard(String token, String cardId) async {
+    final token = await SecureTokenStorage.getToken();
+    final baseUrl = await ApiConstants.getBaseUrl('');
+    final response = await http.delete(
+      Uri.parse('$baseUrl/cards/$cardId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    debugPrint(
+      '🗑️ DELETE status=${response.statusCode} body=${response.body}',
+    );
+    return response.statusCode == 200 || response.statusCode == 204;
+  }
+
   // Menghapus Subtask (DELETE /api/cards/:cardId/list)
   Future<void> deleteCardList(String token, String cardId, String clId) async {
+    final token = await SecureTokenStorage.getToken();
     final baseUrl = await ApiConstants.getBaseUrl('');
     final response = await http.delete(
       Uri.parse('$baseUrl/cards/$cardId/list/$clId'),
@@ -295,6 +331,7 @@ class CardService {
     String cardId,
     Map<String, dynamic> collabData,
   ) async {
+    final token = await SecureTokenStorage.getToken();
     final baseUrl = await ApiConstants.getBaseUrl('');
     final response = await http.post(
       Uri.parse(
